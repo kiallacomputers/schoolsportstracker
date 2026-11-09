@@ -1,3 +1,4 @@
+import { sendGraphMail } from '../utils/graphMail'
 import { createError, readMultipartFormData } from 'h3'
 import { ipHash, supaRequest, verifyTurnstile } from '../utils/schoolEnquiry'
 export default defineEventHandler(async event=>{
@@ -20,5 +21,11 @@ export default defineEventHandler(async event=>{
   await supaRequest(event,`/storage/v1/object/school-logos/${path}`,{method:'POST',headers:{'Content-Type':mime,'x-upsert':'false'},body:Buffer.from(logo)})
   await supaRequest(event,`/rest/v1/school_requests?id=eq.${encodeURIComponent(id)}`,{method:'PATCH',headers:{'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({logo_path:path})})
  }catch(e){console.error('School request logo could not be attached',id,e)} }
+ // Best-effort internal notification. Enquiry success must not depend on mail delivery.
+ const notifyTo=process.env.SCHOOL_REQUEST_NOTIFICATION_EMAIL?.trim()
+ if(notifyTo){
+  try {await sendGraphMail({to:notifyTo,subject:'New School Sports Tracker school request',text:`A school request has been received for ${fields.schoolName}.\nContact: ${fields.firstName} ${fields.lastName} (${fields.email})\nReview in the SuperAdmin School Requests page.`})}
+  catch(e){console.error('School enquiry notification failed',id,e)}
+ }
  return {ok:true}
 })
