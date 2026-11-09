@@ -1,13 +1,14 @@
+import { verifySchoolCaptcha } from '../utils/schoolCaptcha'
 import { sendGraphMail } from '../utils/graphMail'
 import { createError, readMultipartFormData } from 'h3'
-import { ipHash, supaRequest, verifyTurnstile } from '../utils/schoolEnquiry'
+import { ipHash, supaRequest } from '../utils/schoolEnquiry'
 export default defineEventHandler(async event=>{
  const parts=await readMultipartFormData(event)
  if(!parts)throw createError({statusCode:400,statusMessage:'Invalid form'})
  const fields:Record<string,string>={};let logo:Uint8Array|undefined;let mime=''
  for(const part of parts){if(!part.name)continue;if(part.name==='logo'){logo=part.data;mime=part.type||''}else if(part.data.length<4000)fields[part.name]=part.data.toString('utf8').trim()}
  if(fields.websiteTrap) return {ok:true} // honeypot: silent discard
- await verifyTurnstile(event,fields.turnstileToken||'')
+ await verifySchoolCaptcha(event,fields.captchaToken||'',fields.captchaAnswer||'')
  const required=['schoolName','domain','firstName','lastName','position','email'];if(required.some(k=>!fields[k]))throw createError({statusCode:400,statusMessage:'Complete all required fields'})
  if(logo){if(logo.length>2097152)throw createError({statusCode:400,statusMessage:'Logo must be 2 MB or smaller'});
  const png=logo[0]===137&&logo[1]===80&&logo[2]===78&&logo[3]===71;
