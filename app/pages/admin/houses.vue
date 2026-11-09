@@ -1,0 +1,9 @@
+<script setup lang="ts">
+definePageMeta({middleware:'admin'})
+const db=useSupabaseClient(),schools=ref<any[]>([]),rows=ref<any[]>([]),schoolId=ref(''),name=ref(''),colour=ref('#1376ed'),error=ref('')
+async function load(){const s=await db.from('schools').select('id,name').order('name');schools.value=s.data||[];if(!schoolId.value&&schools.value.length)schoolId.value=schools.value[0].id;const h=await db.from('school_houses').select('id,name,colour,school_id').order('name');rows.value=h.data||[];error.value=s.error?.message||h.error?.message||''}
+onMounted(load)
+async function add(){const r=await db.from('school_houses').insert({school_id:schoolId.value,name:name.value.trim(),colour:colour.value});if(r.error)error.value=r.error.message;else{name.value='';await load()}}
+async function remove(id:string){if(!confirm('Delete this house?'))return;const r=await db.from('school_houses').delete().eq('id',id);if(r.error)error.value=r.error.message;else await load()}
+</script>
+<template><div class="page"><div class="shell admin-section"><NuxtLink to="/dashboard">← Dashboard</NuxtLink><h1>School Houses</h1><form class="card editor" @submit.prevent="add"><label>School<select v-model="schoolId" required><option v-for="s in schools" :key="s.id" :value="s.id">{{s.name}}</option></select></label><label>House name<input v-model="name" required></label><label>Colour<input v-model="colour" type="color"></label><button class="btn">Add House</button></form><p v-if="error" class="error">{{error}}</p><div class="card"><h2>Houses</h2><div v-for="h in rows.filter(x=>x.school_id===schoolId)" :key="h.id" class="data-row"><span><i class="colour-dot" :style="{background:h.colour||'#64748b'}"></i>{{h.name}}</span><button class="secondary" @click="remove(h.id)">Delete</button></div></div></div></div></template>

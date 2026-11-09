@@ -1,0 +1,5 @@
+<script setup lang="ts">
+const supabase=useSupabaseClient();const email=ref('');const password=ref('');const errorMessage=ref('');const busy=ref(false)
+async function signIn(){busy.value=true;errorMessage.value='';const {error}=await supabase.auth.signInWithPassword({email:email.value,password:password.value});busy.value=false;if(error){errorMessage.value=error.message;return}await navigateTo('/dashboard')}
+</script>
+<template><div class="page"><div class="shell"><NuxtLink class="brand" to="/"><img src="/logo.png" alt="Logo"><div><strong>SCHOOL SPORTS TRACKER</strong><small>COMPETE · ACHIEVE · INSPIRE</small></div></NuxtLink><form class="auth" @submit.prevent="signIn"><h1>Staff Sign In</h1><p>Sign in with your authorised account.</p><label class="field"><span>Email</span><input v-model="email" type="email" required></label><label class="field"><span>Password</span><input v-model="password" type="password" required></label><p v-if="errorMessage" class="error">{{errorMessage}}</p><button class="btn" :disabled="busy">{{busy?'Signing in…':'Sign In'}}</button></form></div></div></template>
