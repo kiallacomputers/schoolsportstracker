@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto'
 import { createError, getHeader, getRequestIP } from 'h3'
 export function settings(event: any) {
  const c = useRuntimeConfig(event)
- const url = String(c.public.supabase?.url || c.public.supabaseUrl || process.env.SUPABASE_URL || '').replace(/\/$/, '')
- const key = String(c.schoolEnquiryServiceKey || process.env.NUXT_SUPABASE_SECRET_KEY || '')
+ const url = String(c.public.supabase?.url || c.public.supabaseUrl || process.env.NUXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').replace(/\/$/, '')
+ const key = String(c.schoolEnquiryServiceKey || process.env.NUXT_SCHOOL_ENQUIRY_SERVICE_KEY || process.env.NUXT_SUPABASE_SECRET_KEY || '')
  if (!url || !key) throw createError({statusCode:503,statusMessage:'School requests are not configured'})
  return {url,key}
 }
