@@ -1,25 +1,28 @@
 <script setup lang="ts">
 definePageMeta({ middleware: 'admin' })
 const db = useSupabaseClient()
-type School = { id:string; name:string; code:string|null; allow_student_self_registration:boolean }
+type School = { id:string; name:string; code:string|null; allow_student_self_registration:boolean; deactivated_at:string|null }
 type Domain = { id:string; school_id:string; domain:string; is_primary:boolean; is_verified:boolean; allow_student_registration:boolean }
 const schools = ref<School[]>([])
 const domains = ref<Domain[]>([])
 const selectedId = ref('')
 const name = ref(''), code = ref(''), newDomain = ref('')
 const busy = ref(false), error = ref(''), message = ref('')
+const confirmation = ref('')
+const showInactive = ref(false)
+const visibleSchools = computed(() => schools.value.filter(s => showInactive.value || !s.deactivated_at))
 const selectedSchool = computed(() => schools.value.find(s => s.id === selectedId.value))
 const domainRows = computed(() => domains.value.filter(d => d.school_id === selectedId.value))
 function clearMessages(){ error.value=''; message.value='' }
 async function load(){
   const [s,d] = await Promise.all([
-    db.from('schools').select('id,name,code,allow_student_self_registration').order('name'),
+    db.from('schools').select('id,name,code,allow_student_self_registration,deactivated_at').order('name'),
     db.from('school_email_domains').select('id,school_id,domain,is_primary,is_verified,allow_student_registration').order('domain')
   ])
   schools.value=(s.data||[]) as School[]
   domains.value=(d.data||[]) as Domain[]
   error.value=s.error?.message||d.error?.message||''
-  if(!schools.value.some(x=>x.id===selectedId.value)) selectedId.value=schools.value[0]?.id||''
+  if(!schools.value.some(x=>x.id===selectedId.value)) selectedId.value=(schools.value.find(x=>!x.deactivated_at)||schools.value[0])?.id||''
 }
 onMounted(load)
 async function addSchool(){
@@ -71,6 +74,23 @@ async function removeDomain(d:Domain){
   busy.value=false
   if(r.error)error.value=r.error.message;else {await load();message.value='Domain removed'}
 }
+async function lifecycle(action:'deactivate'|'restore'|'delete'){
+  const school=selectedSchool.value
+  if(!school)return
+  clearMessages()
+  if(action==='deactivate' && !confirm(`Deactivate ${school.name}? School-based access will be suspended.`))return
+  if(action==='restore' && !confirm(`Restore ${school.name}? School-based access will resume.`))return
+  if(action==='delete' && confirmation.value!==school.name){error.value='Type the exact school name to confirm permanent deletion.';return}
+  if(action==='delete' && !confirm(`Permanently delete ${school.name}? This cannot be undone. Deletion is blocked if linked records exist.`))return
+  busy.value=true
+  const r=await db.rpc('school_lifecycle',{p_school_id:school.id,p_action:action,p_confirm_name:action==='delete'?confirmation.value:null})
+  busy.value=false
+  if(r.error){error.value=r.error.message;return}
+  confirmation.value=''
+  if(action==='delete')selectedId.value=''
+  await load()
+  message.value=action==='deactivate'?'School deactivated.':action==='restore'?'School restored.':'Empty school permanently deleted.'
+}
 </script>
 <template>
   <div class="page"><div class="shell admin-section">
@@ -86,7 +106,8 @@ async function removeDomain(d:Domain){
     </form>
     <div class="card">
       <h2>Edit School</h2>
-      <label>Select school<select v-model="selectedId"><option v-for="s in schools" :key="s.id" :value="s.id">{{s.name}}</option></select></label>
+      <label class="checkline"><input v-model="showInactive" type="checkbox"> Show deactivated schools</label>
+      <label>Select school<select v-model="selectedId"><option v-for="s in visibleSchools" :key="s.id" :value="s.id">{{s.name}}{{s.deactivated_at?' (Deactivated)':''}}</option></select></label>
       <template v-if="selectedSchool">
         <form class="editor" style="margin-top:16px" @submit.prevent="saveSchool">
           <label>School name<input v-model="selectedSchool.name" required maxlength="150"></label>
@@ -94,6 +115,22 @@ async function removeDomain(d:Domain){
           <label class="checkline"><input v-model="selectedSchool.allow_student_self_registration" type="checkbox"> Allow student self-registration</label>
           <button class="btn" :disabled="busy">Save School</button>
         </form>
+      </template>
+    </div>
+    <div v-if="selectedSchool" class="card">
+      <h2>School Lifecycle</h2>
+      <p v-if="selectedSchool.deactivated_at" class="notice">This school is deactivated. School membership access is suspended. Competition-specific staff grants should be reviewed separately.</p>
+      <p v-else>Deactivate the school to suspend school-based access while retaining its records.</p>
+      <button v-if="!selectedSchool.deactivated_at" type="button" class="secondary" :disabled="busy" @click="lifecycle('deactivate')">Deactivate School</button>
+      <template v-else>
+        <button type="button" class="secondary" :disabled="busy" @click="lifecycle('restore')">Restore School</button>
+        <hr style="margin:24px 0">
+        <h3>Permanently Delete School</h3>
+        <p class="notice">Only empty schools can be permanently deleted. Schools with students, houses, memberships, competitions or other linked records must remain deactivated. Deletion cannot be undone.</p>
+        <label>Type <strong>{{selectedSchool.name}}</strong> to confirm
+          <input v-model="confirmation" autocomplete="off" placeholder="Exact school name">
+        </label>
+        <button type="button" class="btn" style="background:#a32222;margin-top:12px" :disabled="busy || confirmation!==selectedSchool.name" @click="lifecycle('delete')">Permanently Delete School</button>
       </template>
     </div>
     <div v-if="selectedSchool" class="card">
