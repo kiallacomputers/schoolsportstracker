@@ -86,28 +86,7 @@ async function signOut() { await db.auth.signOut(); await navigateTo('/login') }
 </script>
 
 <template>
-  <div class="unified-layout">
-    <div v-if="mobileOpen" class="mobile-shade" @click="mobileOpen = false"></div>
-    <aside class="sidebar" :class="{ 'sidebar-open': mobileOpen }">
-      <NuxtLink to="/dashboard" class="sidebar-brand" @click="mobileOpen = false">
-        <img src="/logo.png" alt="School Sports Tracker" />
-        <span><strong>School Sports Tracker</strong><small>COMPETE · ACHIEVE · INSPIRE</small></span>
-      </NuxtLink>
-      <div class="role-label">{{ isPlatformAdmin ? 'Platform Administration' : isSchoolAdmin ? 'School Administrator' : 'School Staff' }}</div>
-      <nav class="sidebar-nav" aria-label="Dashboard navigation">
-        <NuxtLink to="/dashboard" class="nav-item" exact-active-class="nav-active" @click="mobileOpen = false"><span>▦</span> Dashboard</NuxtLink>
-        <template v-if="isPlatformAdmin">
-          <NuxtLink v-for="item in platformLinks" :key="item.to" :to="item.to" class="nav-item" active-class="nav-active" @click="mobileOpen = false"><span>{{ item.icon }}</span> {{ item.label }}</NuxtLink>
-        </template>
-        <template v-else>
-          <NuxtLink v-for="item in schoolLinks" :key="item.to" :to="item.to" class="nav-item" active-class="nav-active" @click="mobileOpen = false"><span>{{ item.icon }}</span> {{ item.label }}</NuxtLink>
-        </template>
-      </nav>
-      <button class="signout" @click="signOut">Sign Out</button>
-    </aside>
-    <div class="main-column">
-      <header class="dashboard-header"><button class="menu-toggle" aria-label="Open navigation menu" @click="mobileOpen = !mobileOpen">☰</button><strong>{{ isPlatformAdmin ? 'Administration Dashboard' : schoolName }}</strong></header>
-      <main class="dashboard-main">
+<main class="dashboard-main">
         <div class="eyebrow">{{ isPlatformAdmin ? 'Platform Administration' : 'School Portal' }}</div>
         <h1>{{ isPlatformAdmin ? 'Sports Dashboard' : schoolName }}</h1>
         <p v-if="loading">Checking your account…</p>
@@ -125,18 +104,13 @@ async function signOut() { await db.auth.signOut(); await navigateTo('/login') }
           <div class="summary-card"><h2>Recent Competitions</h2><p v-for="c in recent" :key="c.id">{{ c.name }} — {{ c.status }}</p><p v-if="!recent.length">No competitions to display.</p></div>
         </template>
       </main>
-    </div>
-  </div>
 </template>
-
 <style scoped>
-.unified-layout{display:flex;min-height:100vh;background:#07172c;color:#f4f8ff}
-.sidebar{width:260px;flex-shrink:0;background:#0d2342;border-right:1px solid #25486e;display:flex;flex-direction:column;min-height:100vh;position:sticky;top:0;height:100vh}
-.sidebar-brand{display:flex;gap:12px;align-items:center;padding:22px 16px;color:white;text-decoration:none;border-bottom:1px solid #25486e}
-.sidebar-brand img{width:42px;height:42px;object-fit:contain}.sidebar-brand strong{display:block;font-size:14px}.sidebar-brand small{font-size:9px;letter-spacing:1px;color:#afc5e0}
-.role-label{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#9eb6d5;padding:22px 18px 10px}
-.sidebar-nav{display:flex;flex-direction:column;gap:4px;padding:0 10px;overflow-y:auto;flex:1}.nav-item{display:flex;align-items:center;gap:12px;padding:11px 12px;color:#d4e4f9;text-decoration:none;border-radius:8px;font-size:14px}.nav-item span{min-width:20px;text-align:center}.nav-item:hover{background:#173a66}.nav-active{background:#175da5;color:white;font-weight:700}
-.signout{margin:12px;background:#142f52;color:white;border:1px solid #355679;padding:12px;border-radius:8px;cursor:pointer}.signout:hover{background:#1c4677}
-.main-column{flex:1;min-width:0}.dashboard-header{height:72px;border-bottom:1px solid #25486e;display:flex;align-items:center;gap:14px;padding:0 30px;background:#0a1e38}.dashboard-main{max-width:1300px;padding:36px 32px;margin:auto}.dashboard-main h1{font-size:30px;margin:8px 0 26px}.eyebrow{text-transform:uppercase;letter-spacing:1.6px;color:#81b7f6;font-size:12px}.muted{color:#b3c8e1}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin:22px 0}.summary-card{background:#102b4c;border:1px solid #2a4b71;border-radius:12px;padding:22px;margin-bottom:16px}.summary-card h2{font-size:15px;color:#c1d8f1;margin:0 0 12px}.summary-card strong{font-size:32px}.summary-card p{margin:8px 0}.school-picker{display:flex;gap:12px;align-items:center}.school-picker select{background:#102b4c;color:white;border:1px solid #4b729b;padding:8px;border-radius:6px}.menu-toggle{display:none;color:white;background:none;border:0;font-size:26px;cursor:pointer}.mobile-shade{display:none}.error{color:#ffaaaa}
-@media(max-width:800px){.sidebar{position:fixed;z-index:30;left:0;transform:translateX(-100%);transition:transform .2s}.sidebar-open{transform:translateX(0)}.mobile-shade{display:block;position:fixed;inset:0;background:#0009;z-index:29}.menu-toggle{display:block}.dashboard-main{padding:24px 16px}.dashboard-header{padding:0 16px}}
+.dashboard-main{max-width:1300px;padding:24px 16px;margin:auto;color:#f4f8ff}
+.dashboard-main h1{font-size:30px;margin:8px 0 26px}
+.eyebrow{text-transform:uppercase;letter-spacing:1.6px;color:#81b7f6;font-size:12px}
+.muted{color:#b3c8e1}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin:22px 0}
+.summary-card{background:#102b4c;border:1px solid #2a4b71;border-radius:12px;padding:22px;margin-bottom:16px}
+.summary-card h2{font-size:15px;color:#c1d8f1;margin:0 0 12px}.summary-card strong{font-size:32px}.summary-card p{margin:8px 0}
+.school-picker{display:flex;gap:12px;align-items:center}.school-picker select{background:#102b4c;color:white;border:1px solid #4b729b;padding:8px;border-radius:6px}.error{color:#ffaaaa}
 </style>
