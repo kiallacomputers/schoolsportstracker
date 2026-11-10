@@ -109,7 +109,7 @@ onMounted(load)
         <div class="card" style="margin-bottom:1rem">
           <h2>{{selectedCompetition.name}}</h2>
           <p>{{sportName(selectedCompetition.sport_id)}} · {{selectedCompetition.school_year}} · {{selectedCompetition.status}}</p>
-          <p v-if="selectedCompetition.organiser_school_id!==schoolId || selectedCompetition.competition_type!=='intra_school" class="notice">This competition is managed by its organiser. You can view its events but cannot edit it here.</p>
+          <p v-if="selectedCompetition.organiser_school_id!==schoolId || selectedCompetition.competition_type!=='intra_school'" class="notice">This competition is managed by its organiser. You can view its events but cannot edit it here.</p>
           <form v-else-if="canEdit" class="form-grid" @submit.prevent="updateCompetition">
             <label class="field"><span>Name</span><input v-model="editForm.name" required minlength="3" maxlength="120" /></label>
             <label class="field"><span>Date</span><input v-model="editForm.starts_on" type="date" /></label>
