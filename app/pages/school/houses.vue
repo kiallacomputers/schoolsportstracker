@@ -10,6 +10,9 @@ const role = ref('')
 const name = ref('')
 const colour = ref('#2563eb')
 const saving = ref(false)
+const editingId = ref<string | null>(null)
+const deletingId = ref<string | null>(null)
+const notice = ref('')
 
 // Always-visible HSV palette: no browser colour-picker popup required.
 const palette = ref<HTMLElement | null>(null)
@@ -24,6 +27,40 @@ function hsvToHex(h: number, s: number, v: number): string {
   const m = v - c
   const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x]
   return '#' + [r, g, b].map(n => Math.round((n + m) * 255).toString(16).padStart(2, '0')).join('')
+}
+
+function hexToHsv(hex: string) {
+  const safe = validColour(hex)
+  const r = parseInt(safe.slice(1, 3), 16) / 255
+  const g = parseInt(safe.slice(3, 5), 16) / 255
+  const b = parseInt(safe.slice(5, 7), 16) / 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), diff = max - min
+  let h = 0
+  if (diff) {
+    if (max === r) h = ((g - b) / diff) % 6
+    else if (max === g) h = (b - r) / diff + 2
+    else h = (r - g) / diff + 4
+    h = (h * 60 + 360) % 360
+  }
+  return { h: Math.round(h), s: max ? Math.round(diff / max * 100) : 0, v: Math.round(max * 100) }
+}
+
+function editHouse(house: any) {
+  if (role.value !== 'school_admin') return
+  editingId.value = house.id
+  name.value = house.name
+  colour.value = validColour(house.colour)
+  const hsv = hexToHsv(colour.value)
+  hue.value = hsv.h; saturation.value = hsv.s; brightness.value = hsv.v
+  notice.value = ''; error.value = ''
+  document.getElementById('house-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function cancelEdit() {
+  editingId.value = null
+  name.value = ''
+  notice.value = ''
+  error.value = ''
 }
 
 function updateColour() {
@@ -90,15 +127,34 @@ async function refresh() {
 async function add() {
   if (role.value !== 'school_admin' || !name.value.trim()) return
   saving.value = true
-  error.value = ''
-  const result = await db.from('school_houses').insert({
-    school_id: schoolId.value,
-    name: name.value.trim(),
-    colour: colour.value
-  })
+  error.value = ''; notice.value = ''
+  const result = editingId.value
+    ? await db.from('school_houses').update({ name: name.value.trim(), colour: colour.value })
+        .eq('id', editingId.value).eq('school_id', schoolId.value).select('id')
+    : await db.from('school_houses').insert({
+        school_id: schoolId.value, name: name.value.trim(), colour: colour.value
+      }).select('id')
   saving.value = false
   if (result.error) { error.value = result.error.message; return }
+  if (!result.data?.length) { error.value = 'No house was changed. Check your school permissions.'; return }
+  notice.value = editingId.value ? 'House updated successfully.' : 'House added successfully.'
+  editingId.value = null
   name.value = ''
+  await refresh()
+}
+
+async function deleteHouse(house: any) {
+  if (role.value !== 'school_admin' || deletingId.value) return
+  if (!window.confirm(`Permanently delete the house "${house.name}"? This cannot be undone and may be blocked if students or results are linked to it.`)) return
+  deletingId.value = house.id
+  error.value = ''; notice.value = ''
+  const result = await db.from('school_houses').delete()
+    .eq('id', house.id).eq('school_id', schoolId.value).select('id')
+  deletingId.value = null
+  if (result.error) { error.value = `Could not delete ${house.name}: ${result.error.message}`; return }
+  if (!result.data?.length) { error.value = 'House was not deleted. Check your school permissions.'; return }
+  if (editingId.value === house.id) cancelEdit()
+  notice.value = `House "${house.name}" deleted.`
   await refresh()
 }
 
@@ -112,9 +168,10 @@ onMounted(load)
       <h1>{{ schoolName }} — Houses</h1>
       <p v-if="busy">Loading…</p>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
+      <p v-if="notice" role="status">{{ notice }}</p>
       <template v-if="!busy && schoolId">
-        <form v-if="role === 'school_admin'" class="card house-editor" @submit.prevent="add">
-          <h2>Add House</h2>
+        <form v-if="role === 'school_admin'" id="house-editor" class="card house-editor" @submit.prevent="add">
+          <h2>{{ editingId ? 'Edit House' : 'Add House' }}</h2>
           <label class="house-name">House name
             <input v-model="name" required maxlength="120" placeholder="e.g. Patrick" />
           </label>
@@ -147,13 +204,20 @@ onMounted(load)
               </div>
             </div>
           </div>
-          <button class="btn" :disabled="saving">{{ saving ? 'Saving…' : 'Add House' }}</button>
+          <button class="btn" :disabled="saving">{{ saving ? 'Saving…' : editingId ? 'Save Changes' : 'Add House' }}</button>
+          <button v-if="editingId" type="button" class="btn cancel-btn" :disabled="saving" @click="cancelEdit">Cancel</button>
         </form>
         <div class="card">
           <h2>School Houses</h2>
           <div v-for="house in rows" :key="house.id" class="data-row house-row">
             <span>{{ house.name }}</span>
-            <span class="house-colour" :style="{ backgroundColor: validColour(house.colour) }" :aria-label="`${house.name} house colour`" :title="validColour(house.colour)" role="img"></span>
+            <div class="house-actions">
+              <span class="house-colour" :style="{ backgroundColor: validColour(house.colour) }" :aria-label="`${house.name} house colour`" :title="validColour(house.colour)" role="img"></span>
+              <template v-if="role === 'school_admin'">
+                <button type="button" class="action-btn" :disabled="saving || !!deletingId" :aria-label="`Edit ${house.name}`" @click="editHouse(house)">Edit</button>
+                <button type="button" class="action-btn delete-btn" :disabled="saving || !!deletingId" :aria-label="`Delete ${house.name}`" @click="deleteHouse(house)">{{ deletingId === house.id ? 'Deleting…' : 'Delete' }}</button>
+              </template>
+            </div>
           </div>
           <p v-if="!rows.length">No houses recorded.</p>
         </div>
@@ -186,4 +250,13 @@ onMounted(load)
 .house-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
 .house-colour { display: inline-block; width: 44px; height: 28px; border-radius: 7px; border: 1px solid rgba(255,255,255,.35); flex-shrink: 0; }
 @media (max-width: 620px) { .house-editor .btn { width: 100%; } }
+</style>
+
+<style scoped>
+.house-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.action-btn { background:transparent; color:inherit; border:1px solid rgba(255,255,255,.35); border-radius:7px; padding:7px 13px; cursor:pointer; }
+.action-btn:hover { background:rgba(255,255,255,.12); }
+.action-btn:disabled { opacity:.5; cursor:not-allowed; }
+.delete-btn { border-color:#ef7777; color:#ffb6b6; }
+.cancel-btn { background:transparent; border:1px solid rgba(255,255,255,.4); }
 </style>
