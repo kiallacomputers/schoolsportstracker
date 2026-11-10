@@ -6,6 +6,7 @@ const platformAdmin = ref(false)
 const memberships = ref<any[]>([])
 const activeSchool = ref('')
 const mobileOpen = ref(false)
+const desktopCollapsed = ref(false)
 const ready = ref(false)
 const roleLabel = computed(() => platformAdmin.value ? 'Platform Administration' : memberships.value.find(m => m.school_id === activeSchool.value)?.role === 'school_admin' ? 'School Administrator' : 'School Staff')
 const schoolName = computed(() => memberships.value.find(m => m.school_id === activeSchool.value)?.schools?.name || 'School Sports Tracker')
@@ -67,7 +68,7 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
 <template>
   <div class="workspace">
     <div v-if="mobileOpen" class="shade" @click="mobileOpen=false"></div>
-    <aside class="side" :class="{'open':mobileOpen}">
+    <aside class="side" :class="{'open':mobileOpen, 'collapsed':desktopCollapsed}">
       <NuxtLink class="brand" to="/dashboard" @click="mobileOpen=false">
         <img :src="'/images/school-sports-tracker-logo.png'" alt="School Sports Tracker" />
         <span><strong>School Sports Tracker</strong><small>COMPETE · ACHIEVE · INSPIRE</small></span>
@@ -83,7 +84,7 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
       <button class="logout" type="button" @click="signOut">Sign Out</button>
     </aside>
     <div class="content">
-      <header class="top"><button class="toggle" type="button" aria-label="Toggle menu" @click="mobileOpen=!mobileOpen">☰</button><strong>{{ platformAdmin ? 'Platform Administration' : schoolName }}</strong></header>
+      <header class="top"><button class="toggle" type="button" aria-label="Toggle navigation" @click="mobileOpen=!mobileOpen; desktopCollapsed=!desktopCollapsed">☰</button><strong>{{ platformAdmin ? 'Platform Administration' : schoolName }}</strong></header>
       <main class="page"><slot /></main>
     </div>
   </div>
@@ -97,6 +98,7 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
 .nav{display:flex;flex-direction:column;gap:4px;padding:0 10px;overflow-y:auto;flex:1}.item{display:flex;align-items:center;gap:12px;padding:11px 12px;color:#d4e4f9;text-decoration:none;border-radius:8px;font-size:14px}.item span{min-width:22px;text-align:center}.item:hover{background:#173a66}.current{background:#175da5;color:white;font-weight:700}
 .logout{margin:12px;padding:12px;background:#142f52;color:white;border:1px solid #355679;border-radius:8px;cursor:pointer}
 .content{flex:1;min-width:0}.top{min-height:70px;display:flex;align-items:center;gap:14px;padding:0 26px;background:#0a1e38;border-bottom:1px solid #25486e}.page{padding:24px 28px;max-width:100%;overflow-x:auto}
-.toggle{display:none;background:none;border:0;color:white;font-size:26px;cursor:pointer}.shade{display:none}
-@media(max-width:800px){.side{position:fixed;left:0;transform:translateX(-100%);transition:transform .2s}.side.open{transform:translateX(0)}.shade{display:block;position:fixed;inset:0;background:#0009;z-index:29}.toggle{display:block}.top{padding:0 16px}.page{padding:18px 12px}}
+.toggle{display:block;background:none;border:0;color:white;font-size:26px;cursor:pointer}.shade{display:none}
+@media(min-width:801px){.side.collapsed{width:0;min-width:0;overflow:hidden;border-right:0}.content{min-width:0}}
+@media(max-width:800px){.side.collapsed{width:260px;min-width:260px;overflow:visible}.side{position:fixed;left:0;transform:translateX(-100%);transition:transform .2s}.side.open{transform:translateX(0)}.shade{display:block;position:fixed;inset:0;background:#0009;z-index:29}.toggle{display:block}.top{padding:0 16px}.page{padding:18px 12px}}
 </style>

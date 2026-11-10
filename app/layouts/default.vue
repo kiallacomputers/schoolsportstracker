@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const route = useRoute()
-const workspaceRoute = computed(() => route.path === '/dashboard' || route.path.startsWith('/school/') || route.path.startsWith('/admin/'))
+const workspaceRoute = computed(() => route.path === '/dashboard' || route.path.startsWith('/school/') || route.path.startsWith('/admin/') || route.path.startsWith('/teacher/'))
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 
