@@ -8,6 +8,7 @@ const rows = ref<any[]>([]), houses = ref<any[]>([]), enrolments = ref<any[]>([]
 const year = ref(new Date().getFullYear()), search = ref('')
 const blank = () => ({id:'',student_number:'',given_name:'',family_name:'',date_of_birth:'',year_level:'',house_id:''})
 const form = ref(blank()), editing = ref(false)
+const studentFormSection = ref<HTMLElement | null>(null)
 const csvPreview = ref<any[]>([]), importing = ref(false), importReport = ref('')
 const display = computed(() => rows.value.filter(s => `${s.given_name} ${s.family_name} ${s.student_number}`.toLowerCase().includes(search.value.toLowerCase())))
 const enrolmentFor = (id:string) => enrolments.value.find(e => e.student_id === id)
@@ -35,10 +36,13 @@ async function load() {
 }
 onMounted(load)
 watch([schoolId,year],load)
-function startEdit(s:any) {
+async function startEdit(s:any) {
   const e = enrolmentFor(s.id)
   form.value = { ...s, date_of_birth:s.date_of_birth || '', year_level:e?.year_level || '', house_id:e?.house_id || '' }
   editing.value = true; notice.value = ''; error.value = ''
+  await nextTick()
+  studentFormSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  studentFormSection.value?.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true })
 }
 function reset() { form.value = blank(); editing.value = false }
 async function save() {
@@ -49,8 +53,9 @@ async function save() {
   saving.value = true
   try {
     const record:any = { school_id:schoolId.value, student_number:f.student_number.trim(), given_name:f.given_name.trim(), family_name:f.family_name.trim(), date_of_birth:f.date_of_birth || null }
-    if (f.id) record.id = f.id
-    const s = await db.from('students').upsert(record, {onConflict:f.id?'id':'school_id,student_number'}).select('id').single()
+    const s = f.id
+      ? await db.from('students').update(record).eq('id', f.id).eq('school_id', schoolId.value).select('id').single()
+      : await db.from('students').upsert(record, {onConflict:'school_id,student_number'}).select('id').single()
     if (s.error) throw s.error
     const e = await db.from('student_enrolments').upsert({student_id:s.data.id,school_id:schoolId.value,school_year:year.value,year_level:f.year_level.trim() || null,house_id:f.house_id || null},{onConflict:'student_id,school_year'})
     if (e.error) throw e.error
@@ -122,7 +127,7 @@ async function importCsv() {
   <p class="notice">Student records are restricted to your school. Only School Administrators can make changes.</p>
   <p v-if="error" class="error" role="alert">{{error}}</p><p v-if="notice" class="notice" role="status">{{notice}}</p>
   <div class="card" style="margin-bottom:1rem"><label class="field">School year <input v-model.number="year" type="number" min="2000" max="2200" /></label></div>
-  <section v-if="canEdit" class="card" style="margin-bottom:1rem"><h2>{{editing?'Edit Student':'Add Student'}}</h2>
+  <section v-if="canEdit" ref="studentFormSection" class="card" style="margin-bottom:1rem;scroll-margin-top:1rem"><h2>{{editing?'Edit Student':'Add Student'}}</h2>
     <div class="cards"><label class="field">Student number<input v-model="form.student_number" maxlength="100" /></label><label class="field">First name<input v-model="form.given_name" maxlength="100" /></label><label class="field">Last name<input v-model="form.family_name" maxlength="100" /></label><label class="field">Date of birth (optional)<input v-model="form.date_of_birth" type="date" /></label><label class="field">Year level<input v-model="form.year_level" placeholder="e.g. 9" maxlength="30" /></label><label class="field">House<select v-model="form.house_id"><option value="">Not assigned</option><option v-for="h in houses" :key="h.id" :value="h.id">{{h.name}}</option></select></label></div>
     <div style="display:flex;gap:.75rem;margin-top:1rem"><button class="btn" :disabled="saving" @click="save">{{saving?'Saving…':editing?'Save Changes':'Add Student'}}</button><button v-if="editing" class="btn" @click="reset">Cancel</button></div>
   </section>
