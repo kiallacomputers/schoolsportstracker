@@ -8,6 +8,15 @@ const activeSchool = ref('')
 const mobileOpen = ref(false)
 const desktopCollapsed = ref(false)
 const ready = ref(false)
+const studentFlyoutOpen = ref(false)
+const studentMenuEnabled = computed(() => !platformAdmin.value && !!activeSchool.value && memberships.value.some(m => m.school_id === activeSchool.value && m.role === 'school_admin'))
+const studentPage = computed(() => '/school/students?school=' + encodeURIComponent(activeSchool.value))
+function openStudentAdd() {
+  if (!studentMenuEnabled.value) return
+  studentFlyoutOpen.value = false
+  mobileOpen.value = false
+  navigateTo({ path: '/school/students', query: { school: activeSchool.value, action: 'add' } })
+}
 const roleLabel = computed(() => platformAdmin.value ? 'Platform Administration' : memberships.value.find(m => m.school_id === activeSchool.value)?.role === 'school_admin' ? 'School Administrator' : 'School Staff')
 const schoolName = computed(() => memberships.value.find(m => m.school_id === activeSchool.value)?.schools?.name || 'School Sports Tracker')
 const schoolOptions = computed(() => memberships.value.map(m => ({ id:m.school_id, name:m.schools?.name || 'School' })))
@@ -57,8 +66,9 @@ onMounted(checkAccess)
 watch(() => route.query.school, (id) => {
   if (typeof id === 'string' && memberships.value.some(m=>m.school_id === id)) activeSchool.value = id
 })
-watch(() => route.path, () => { mobileOpen.value = false })
+watch(() => route.path, () => { mobileOpen.value = false; studentFlyoutOpen.value = false })
 watch(activeSchool, async (id,old) => {
+  studentFlyoutOpen.value = false
   if (!id || !old || id===old || platformAdmin.value) return
   const path = route.path
   if (path.startsWith('/school/')) await navigateTo({path,query:{...route.query,school:id}})
@@ -81,7 +91,19 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
       </label>
       <nav class="nav" aria-label="Administration navigation">
         <NuxtLink :to="platformAdmin ? '/dashboard' : '/dashboard?school='+encodeURIComponent(activeSchool)" class="item" :class="{'current':route.path==='/dashboard'}" @click="mobileOpen=false"><span>▦</span> Dashboard</NuxtLink>
-        <NuxtLink v-for="item in links" :key="item.to" :to="item.to" class="item" :class="{'current':selected(item.to)}" @click="mobileOpen=false"><span>{{item.icon}}</span>{{item.label}}</NuxtLink>
+        <template v-for="item in links" :key="item.to">
+          <div v-if="item.label === 'Students' && studentMenuEnabled" class="student-menu-anchor">
+            <button type="button" class="item student-menu-trigger" :class="{'current':route.path==='/school/students'}" :aria-expanded="studentFlyoutOpen" aria-controls="student-flyout" @click="studentFlyoutOpen=!studentFlyoutOpen">
+              <span>{{item.icon}}</span> Students <span class="menu-chevron">{{studentFlyoutOpen ? '‹' : '›'}}</span>
+            </button>
+            <div v-if="studentFlyoutOpen" id="student-flyout" class="student-flyout" aria-label="Student actions">
+              <div class="flyout-heading">Students</div>
+              <NuxtLink :to="studentPage" class="flyout-item" @click="studentFlyoutOpen=false;mobileOpen=false">View Students</NuxtLink>
+              <button type="button" class="flyout-item" @click="openStudentAdd">+ Add Student</button>
+            </div>
+          </div>
+          <NuxtLink v-else :to="item.to" class="item" :class="{'current':selected(item.to)}" @click="mobileOpen=false;studentFlyoutOpen=false"><span>{{item.icon}}</span>{{item.label}}</NuxtLink>
+        </template>
       </nav>
       <button class="logout" type="button" @click="signOut">Sign Out</button>
     </aside>
@@ -98,9 +120,9 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
 .role{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#9eb6d5;padding:20px 18px 10px}
 .school-select{padding:0 14px 12px;color:#c7d9ef;font-size:12px}.school-select select{display:block;width:100%;margin-top:5px;background:#102b4c;color:white;border:1px solid #4b729b;border-radius:6px;padding:8px}
 .nav{display:flex;flex-direction:column;gap:4px;padding:0 10px;overflow-y:auto;flex:1}.item{display:flex;align-items:center;gap:12px;padding:11px 12px;color:#d4e4f9;text-decoration:none;border-radius:8px;font-size:14px}.item span{min-width:22px;text-align:center}.item:hover{background:#173a66}.current{background:#175da5;color:white;font-weight:700}
-.logout{margin:12px;padding:12px;background:#142f52;color:white;border:1px solid #355679;border-radius:8px;cursor:pointer}
+.student-menu-anchor{position:relative}.student-menu-trigger{width:100%;background:transparent;border:0;text-align:left;font-family:inherit;cursor:pointer}.menu-chevron{margin-left:auto!important;min-width:12px!important}.student-flyout{position:fixed;top:146px;left:260px;width:224px;background:#102b4c;border:1px solid #355c84;border-radius:0 12px 12px 0;box-shadow:0 14px 35px #0008;padding:12px;z-index:70}.flyout-heading{color:#a9c9ed;font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin:4px 8px 10px}.flyout-item{display:block;width:100%;padding:12px 10px;border:0;border-radius:7px;text-align:left;background:transparent;color:white;font:inherit;font-size:14px;text-decoration:none;cursor:pointer}.flyout-item:hover,.flyout-item:focus-visible{background:#175da5}.logout{margin:12px;padding:12px;background:#142f52;color:white;border:1px solid #355679;border-radius:8px;cursor:pointer}
 .content{flex:1;min-width:0}.top{min-height:70px;display:flex;align-items:center;gap:14px;padding:0 26px;background:#0a1e38;border-bottom:1px solid #25486e}.page{padding:24px 28px;max-width:100%;overflow-x:auto}
 .toggle{display:block;background:none;border:0;color:white;font-size:26px;cursor:pointer}.shade{display:none}
-@media(min-width:801px){.side.collapsed{width:0;min-width:0;overflow:hidden;border-right:0}.content{min-width:0}}
-@media(max-width:800px){.side.collapsed{width:260px;min-width:260px;overflow:visible}.side{position:fixed;left:0;transform:translateX(-100%);transition:transform .2s}.side.open{transform:translateX(0)}.shade{display:block;position:fixed;inset:0;background:#0009;z-index:29}.toggle{display:block}.top{padding:0 16px}.page{padding:18px 12px}}
+@media(min-width:801px){.side.collapsed .student-flyout{display:none}.side.collapsed{width:0;min-width:0;overflow:hidden;border-right:0}.content{min-width:0}}
+@media(max-width:800px){.student-flyout{position:static;width:auto;margin:4px 0 8px 12px;border-radius:9px}.side.collapsed{width:260px;min-width:260px;overflow:visible}.side{position:fixed;left:0;transform:translateX(-100%);transition:transform .2s}.side.open{transform:translateX(0)}.shade{display:block;position:fixed;inset:0;background:#0009;z-index:29}.toggle{display:block}.top{padding:0 16px}.page{padding:18px 12px}}
 </style>

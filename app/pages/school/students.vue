@@ -12,7 +12,19 @@ const modalOpen = ref(false)
 const confirmSave = ref(false)
 const modalError = ref('')
 function startAdd() { form.value = blank(); editing.value = false; modalError.value = ''; confirmSave.value = false; modalOpen.value = true }
-function closeModal() { if (saving.value) return; modalOpen.value = false; confirmSave.value = false; modalError.value = ''; reset() }
+function closeModal() { if (saving.value) return; modalOpen.value = false; confirmSave.value = false; modalError.value = ''; reset(); clearAddAction() }
+function clearAddAction() {
+  if (route.query.action !== 'add') return
+  const query = { ...route.query }
+  delete query.action
+  navigateTo({ path: route.path, query, replace: true })
+}
+function openAddFromMenu() {
+  if (route.query.action !== 'add' || busy.value || !canEdit.value) return
+  if (!modalOpen.value) startAdd()
+}
+watch(() => route.query.action, (action) => { if (action === 'add') openAddFromMenu() })
+watch([busy, canEdit], () => openAddFromMenu())
 function requestSave() {
   modalError.value = ''
   if (!form.value.student_number.trim() || !form.value.given_name.trim() || !form.value.family_name.trim()) { modalError.value = 'Student number, first name and last name are required.'; return }
@@ -44,7 +56,7 @@ async function load() {
     if (failure) throw failure
     rows.value = s.data || []; houses.value = h.data || []; enrolments.value = e.data || []
   } catch (e:any) { error.value = e.message || 'Unable to load students.' }
-  finally { busy.value = false }
+  finally { busy.value = false; nextTick(() => openAddFromMenu()) }
 }
 onMounted(load)
 watch([schoolId,year],load)
@@ -68,7 +80,7 @@ async function save() {
     if (s.error) throw s.error
     const e = await db.from('student_enrolments').upsert({student_id:s.data.id,school_id:schoolId.value,school_year:year.value,year_level:f.year_level.trim() || null,house_id:f.house_id || null},{onConflict:'student_id,school_year'})
     if (e.error) throw e.error
-    notice.value = 'Student saved.'; modalOpen.value = false; confirmSave.value = false; reset(); await load()
+    notice.value = 'Student saved.'; modalOpen.value = false; confirmSave.value = false; reset(); clearAddAction(); await load()
   } catch(e:any) { modalError.value = e.message || 'Unable to save student.'; confirmSave.value = false }
   finally { saving.value = false }
 }
