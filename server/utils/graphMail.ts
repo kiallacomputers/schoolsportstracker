@@ -8,12 +8,14 @@ const required = (name: string) => {
 
 export function emailConfig() {
   const sender = required('MICROSOFT_SENDER_EMAIL')
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sender)) throw createError({statusCode:503,statusMessage:'Invalid sender email configuration'})
-  return {sender, name:process.env.MAIL_SENDER_NAME?.trim() || 'School Sports Tracker'}
+  const mailbox = process.env.MICROSOFT_MAILBOX_EMAIL?.trim() || sender
+  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!validEmail.test(sender) || !validEmail.test(mailbox)) throw createError({statusCode:503,statusMessage:'Invalid email sender or mailbox configuration'})
+  return {sender, mailbox, name:process.env.MAIL_SENDER_NAME?.trim() || 'School Sports Tracker'}
 }
 
 export async function sendGraphMail(input: {to:string;subject:string;text:string;replyTo?:string}) {
-  const {sender,name} = emailConfig()
+  const {sender,mailbox,name} = emailConfig()
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.to)) throw createError({statusCode:400,statusMessage:'Invalid recipient address'})
   const tenant = required('MICROSOFT_TENANT_ID')
   const clientId = required('MICROSOFT_CLIENT_ID')
@@ -32,10 +34,10 @@ export async function sendGraphMail(input: {to:string;subject:string;text:string
     from:{emailAddress:{address:sender,name}}
   }
   if (input.replyTo) message.replyTo=[{emailAddress:{address:input.replyTo}}]
-  const response = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`,{
+  const response = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/sendMail`,{
     method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
     body:JSON.stringify({message,saveToSentItems:true})
   })
-  if (!response.ok) {console.error('Graph sendMail failed',response.status);throw createError({statusCode:502,statusMessage:'Microsoft Graph could not send the email; check Mail.Send and mailbox permissions'})}
+  if (!response.ok) {console.error('Graph sendMail failed',response.status, (await response.text()).slice(0, 1000));throw createError({statusCode:502,statusMessage:'Microsoft Graph could not send the email; check Mail.Send and mailbox permissions'})}
   return {accepted:true} // Graph 202 Accepted, not delivery confirmation
 }
