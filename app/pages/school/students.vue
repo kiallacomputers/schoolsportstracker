@@ -160,8 +160,6 @@ async function importCsv() {
   <h1>{{schoolName}} — Students</h1>
   <p class="notice">Student records are restricted to your school. School Administrators can edit, disable and reactivate students. Only SuperAdmins can permanently delete student records.</p>
   <p v-if="error" class="error" role="alert">{{error}}</p><p v-if="notice" class="notice" role="status">{{notice}}</p>
-  <div class="card" style="margin-bottom:1rem"><label class="field">School year <input v-model.number="year" type="number" min="2000" max="2200" /></label></div>
-  <div v-if="canEdit" style="display:flex;justify-content:flex-end;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem"><button class="btn" type="button" @click="startAdd">+ Add Student</button></div>
   <div v-if="modalOpen" class="student-modal-backdrop" @click.self="closeModal">
     <section class="student-modal card" role="dialog" aria-modal="true" aria-labelledby="student-modal-title">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem"><h2 id="student-modal-title">{{editing?'Edit Student':'Add Student'}}</h2><button type="button" class="btn" :disabled="saving" aria-label="Close" @click="closeModal">✕</button></div>
