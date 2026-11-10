@@ -153,8 +153,8 @@ async function importCsv() {
 </template>
 
 <style scoped>
-.student-modal-backdrop { position:fixed;inset:0;z-index:1000;background:rgba(10,20,40,.68);display:flex;align-items:center;justify-content:center;padding:1rem;overflow-y:auto }
-.student-modal { width:min(100%,720px);max-height:calc(100vh - 2rem);overflow-y:auto;background:#fff;color:#18243a;box-shadow:0 20px 60px rgba(0,0,0,.3);padding:1.5rem;border-radius:12px }
-.student-confirm { margin-top:1rem;padding:1rem;border:1px solid #c5a35b;border-radius:8px;background:#fff9e9;color:#32250c }
-@media (prefers-color-scheme:dark) { .student-modal { background:#18243a;color:#fff } .student-confirm { background:#392f1e;color:#fff2d0 } }
+.student-modal-backdrop { position:fixed;inset:0;z-index:1000;background:rgba(6,17,37,.78);display:flex;align-items:center;justify-content:center;padding:1rem;overflow-y:auto }
+.student-modal { width:min(100%,720px);max-height:calc(100vh - 2rem);overflow-y:auto;background:#0d2342;color:#fff;border:1px solid #315178;box-shadow:0 20px 60px rgba(0,0,0,.45);padding:1.5rem;border-radius:16px }
+.student-confirm { margin-top:1rem;padding:1rem;border:1px solid #527196;border-radius:8px;background:#133b6c;color:#fff }
+
 </style>
