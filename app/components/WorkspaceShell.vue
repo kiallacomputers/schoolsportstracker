@@ -9,6 +9,16 @@ const mobileOpen = ref(false)
 const desktopCollapsed = ref(false)
 const ready = ref(false)
 const studentFlyoutOpen = ref(false)
+const studentMenuAnchor = ref<HTMLElement | null>(null)
+function closeFlyoutOnOutsideClick(event: PointerEvent) {
+  if (!studentFlyoutOpen.value) return
+  const target = event.target
+  if (target instanceof Node && !studentMenuAnchor.value?.contains(target)) {
+    studentFlyoutOpen.value = false
+  }
+}
+onMounted(() => document.addEventListener('pointerdown', closeFlyoutOnOutsideClick))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', closeFlyoutOnOutsideClick))
 const studentMenuEnabled = computed(() => !platformAdmin.value && !!activeSchool.value && memberships.value.some(m => m.school_id === activeSchool.value && m.role === 'school_admin'))
 const studentPage = computed(() => '/school/students?school=' + encodeURIComponent(activeSchool.value))
 function openStudentAdd() {
@@ -92,14 +102,14 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
       <nav class="nav" aria-label="Administration navigation">
         <NuxtLink :to="platformAdmin ? '/dashboard' : '/dashboard?school='+encodeURIComponent(activeSchool)" class="item" :class="{'current':route.path==='/dashboard'}" @click="mobileOpen=false"><span>▦</span> Dashboard</NuxtLink>
         <template v-for="item in links" :key="item.to">
-          <div v-if="item.label === 'Students' && studentMenuEnabled" class="student-menu-anchor">
+          <div v-if="item.label === 'Students' && studentMenuEnabled" class="student-menu-anchor" ref="studentMenuAnchor">
             <button type="button" class="item student-menu-trigger" :class="{'current':route.path==='/school/students'}" :aria-expanded="studentFlyoutOpen" aria-controls="student-flyout" @click="studentFlyoutOpen=!studentFlyoutOpen">
               <span>{{item.icon}}</span> Students <span class="menu-chevron">{{studentFlyoutOpen ? '‹' : '›'}}</span>
             </button>
             <div v-if="studentFlyoutOpen" id="student-flyout" class="student-flyout" aria-label="Student actions">
               <div class="flyout-heading">Students</div>
               <NuxtLink :to="studentPage" class="flyout-item" @click="studentFlyoutOpen=false;mobileOpen=false">View Students</NuxtLink>
-              <button type="button" class="flyout-item" @click="openStudentAdd">+ Add Student</button>
+              <button type="button" class="flyout-item" @click="openStudentAdd">Add Student</button>
             </div>
           </div>
           <NuxtLink v-else :to="item.to" class="item" :class="{'current':selected(item.to)}" @click="mobileOpen=false;studentFlyoutOpen=false"><span>{{item.icon}}</span>{{item.label}}</NuxtLink>
