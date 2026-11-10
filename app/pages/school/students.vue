@@ -3,7 +3,7 @@ const db = useSupabaseClient()
 const route = useRoute()
 const schoolId = computed(() => typeof route.query.school === 'string' ? route.query.school : '')
 const busy = ref(true), saving = ref(false), error = ref(''), notice = ref('')
-const schoolName = ref(''), canEdit = ref(false)
+const schoolName = ref(''), canEdit = ref(false), isSuperAdmin = ref(false), statusFilter = ref('active')
 const rows = ref<any[]>([]), houses = ref<any[]>([]), enrolments = ref<any[]>([])
 const year = ref(new Date().getFullYear()), search = ref('')
 const blank = () => ({id:'',student_number:'',given_name:'',family_name:'',date_of_birth:'',year_level:'',house_id:''})
@@ -19,7 +19,7 @@ function requestSave() {
   confirmSave.value = true
 }
 const csvPreview = ref<any[]>([]), importing = ref(false), importReport = ref('')
-const display = computed(() => rows.value.filter(s => `${s.given_name} ${s.family_name} ${s.student_number}`.toLowerCase().includes(search.value.toLowerCase())))
+const display = computed(() => rows.value.filter(s => (statusFilter.value === 'all' || (statusFilter.value === 'active' ? s.is_active !== false : s.is_active === false)) && `${s.given_name} ${s.family_name} ${s.student_number}`.toLowerCase().includes(search.value.toLowerCase())))
 const enrolmentFor = (id:string) => enrolments.value.find(e => e.student_id === id)
 async function load() {
   error.value = ''; busy.value = true
@@ -27,13 +27,16 @@ async function load() {
     const {data:{user}} = await db.auth.getUser()
     if (!user) { await navigateTo('/login'); return }
     if (!schoolId.value) throw new Error('Select a school from the School Dashboard.')
+    const platform = await db.rpc('is_platform_admin')
+    if (platform.error) throw platform.error
+    isSuperAdmin.value = platform.data === true
     const m = await db.from('school_memberships').select('school_id,role,schools(name)').eq('user_id',user.id).eq('school_id',schoolId.value).maybeSingle()
     if (m.error) throw m.error
-    if (!m.data || !['school_admin','teacher'].includes(m.data.role)) throw new Error('You do not have access to this school.')
-    canEdit.value = m.data.role === 'school_admin'
-    schoolName.value = (m.data.schools as any)?.name || 'School'
+    if (!isSuperAdmin.value && (!m.data || !['school_admin','teacher'].includes(m.data.role))) throw new Error('You do not have access to this school.')
+    canEdit.value = isSuperAdmin.value || m.data?.role === 'school_admin'
+    schoolName.value = (m.data?.schools as any)?.name || 'School'
     const [s,h,e] = await Promise.all([
-      db.from('students').select('id,student_number,given_name,family_name,date_of_birth').eq('school_id',schoolId.value).order('family_name').limit(2000),
+      db.from('students').select('id,student_number,given_name,family_name,date_of_birth,is_active').eq('school_id',schoolId.value).order('family_name').limit(2000),
       db.from('school_houses').select('id,name,colour').eq('school_id',schoolId.value).order('name'),
       db.from('student_enrolments').select('id,student_id,school_year,year_level,house_id').eq('school_id',schoolId.value).eq('school_year',year.value).limit(2000)
     ])
@@ -70,15 +73,28 @@ async function save() {
   finally { saving.value = false }
 }
 async function remove(s:any) {
-  if (!canEdit.value || saving.value || !confirm(`Permanently delete ${s.given_name} ${s.family_name}? This may be blocked if they have sporting results.`)) return
+  if (!isSuperAdmin.value || saving.value || !confirm(`Permanently delete ${s.given_name} ${s.family_name}? This may be blocked if they have sporting results.`)) return
   saving.value = true; error.value = ''; notice.value = ''
   try {
     // Remove enrolments only if the student itself is not referenced by other records.
     const d = await db.from('students').delete().eq('id',s.id).eq('school_id',schoolId.value).select('id')
     if (d.error) throw d.error
     if (!d.data?.length) throw new Error('Deletion was not permitted. Check school permissions and linked records.')
-    notice.value = 'Student deleted.'; await load()
+    notice.value = 'Student permanently deleted.'; await load()
   } catch(e:any) { error.value = e.message || 'Deletion failed. Student may have linked records.' }
+  finally { saving.value = false }
+}
+async function setStudentActive(s:any, active:boolean) {
+  if (!canEdit.value || saving.value) return
+  const verb = active ? 'reactivate' : 'disable'
+  if (!confirm(`Are you sure you want to ${verb} ${s.given_name} ${s.family_name}? ${active ? 'They will become available for new event registrations.' : 'Their school records and past sporting results will be retained, but new event registrations will be blocked.'}`)) return
+  saving.value = true; error.value = ''; notice.value = ''
+  try {
+    const result = await db.rpc('school_set_student_active', {p_school:schoolId.value,p_student:s.id,p_active:active})
+    if (result.error) throw result.error
+    notice.value = `${s.given_name} ${s.family_name} ${active ? 'reactivated' : 'disabled'}.`
+    await load()
+  } catch(e:any) { error.value = e.message || 'Unable to change student status.' }
   finally { saving.value = false }
 }
 function parseCsv(input:string):string[][] {
@@ -130,7 +146,7 @@ async function importCsv() {
 <div class="page"><div class="shell admin-section">
   <NuxtLink :to="`/school/dashboard`">← School Dashboard</NuxtLink>
   <h1>{{schoolName}} — Students</h1>
-  <p class="notice">Student records are restricted to your school. Only School Administrators can make changes.</p>
+  <p class="notice">Student records are restricted to your school. School Administrators can edit, disable and reactivate students. Only SuperAdmins can permanently delete student records.</p>
   <p v-if="error" class="error" role="alert">{{error}}</p><p v-if="notice" class="notice" role="status">{{notice}}</p>
   <div class="card" style="margin-bottom:1rem"><label class="field">School year <input v-model.number="year" type="number" min="2000" max="2200" /></label></div>
   <div v-if="canEdit" style="display:flex;justify-content:flex-end;margin-bottom:1rem"><button class="btn" type="button" @click="startAdd">+ Add Student</button></div>
@@ -148,7 +164,7 @@ async function importCsv() {
     </section>
   </div>
   <section v-if="canEdit" class="card" style="margin-bottom:1rem"><h2>Import Students from CSV</h2><p>Columns: student_number, given_name, family_name, date_of_birth, year_level, house. Date format YYYY-MM-DD. Existing student numbers are updated. Maximum 500 rows.</p><input type="file" accept=".csv,text/csv" @change="readCsv" /><p v-if="csvPreview.length">{{csvPreview.length}} rows ready to import into {{year}}.</p><button v-if="csvPreview.length" class="btn" :disabled="importing" @click="importCsv">{{importing?'Importing…':'Import Students'}}</button><p v-if="importReport" role="status">{{importReport}}</p></section>
-  <section class="card"><h2>Students ({{display.length}})</h2><input v-model="search" placeholder="Search by name or student number" aria-label="Search students" /><p v-if="busy">Loading…</p><div v-for="s in display" :key="s.id" class="data-row" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap"><div><strong>{{s.family_name}}, {{s.given_name}}</strong><small style="display:block">{{s.student_number}} · Year {{enrolmentFor(s.id)?.year_level||'—'}} · {{houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name||'No house'}}</small></div><div v-if="canEdit" style="display:flex;gap:.5rem"><button class="btn" @click="startEdit(s)">Edit</button><button class="btn" @click="remove(s)">Delete</button></div></div><p v-if="!busy&&!display.length">No students found.</p></section>
+  <section class="card"><h2>Students ({{display.length}})</h2><label class="field">Show students<select v-model="statusFilter"><option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All students</option></select></label><input v-model="search" placeholder="Search by name or student number" aria-label="Search students" /><p v-if="busy">Loading…</p><div v-for="s in display" :key="s.id" class="data-row" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap"><div><strong>{{s.family_name}}, {{s.given_name}}</strong><small style="display:block">{{s.is_active === false ? 'Inactive · ' : ''}}{{s.student_number}} · Year {{enrolmentFor(s.id)?.year_level||'—'}} · {{houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name||'No house'}}</small></div><div v-if="canEdit" style="display:flex;gap:.5rem"><button class="btn" @click="startEdit(s)">Edit</button><button class="btn" :disabled="saving" @click="setStudentActive(s, s.is_active === false)">{{s.is_active === false ? 'Reactivate' : 'Disable'}}</button><button v-if="isSuperAdmin" class="btn" :disabled="saving" @click="remove(s)">Delete Permanently</button></div></div><p v-if="!busy&&!display.length">No students found.</p></section>
 </div></div>
 </template>
 

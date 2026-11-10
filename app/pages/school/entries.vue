@@ -11,7 +11,7 @@ const competitionId = ref(''), eventId = ref(''), studentId = ref(''), search = 
 const competition = computed(() => competitions.value.find(c => c.id === competitionId.value))
 const event = computed(() => events.value.find(e => e.id === eventId.value))
 const selectedEvents = computed(() => events.value.filter(e => e.competition_id === competitionId.value))
-const eligibleStudents = computed(() => students.value.filter(s => enrolments.value.some(e => e.student_id === s.id && e.school_year === competition.value?.school_year) && `${s.given_name} ${s.family_name} ${s.student_number}`.toLowerCase().includes(search.value.toLowerCase())))
+const eligibleStudents = computed(() => students.value.filter(s => s.is_active !== false && enrolments.value.some(e => e.student_id === s.id && e.school_year === competition.value?.school_year) && `${s.given_name} ${s.family_name} ${s.student_number}`.toLowerCase().includes(search.value.toLowerCase())))
 const studentName = (id:string) => { const s=students.value.find(x=>x.id===id); return s ? `${s.given_name} ${s.family_name} (${s.student_number})` : 'Student' }
 const eventName = (id:string) => definitions.value.find(d=>d.id===id)?.name || 'Event'
 const houseName = (id:string|null) => houses.value.find(h=>h.id===id)?.name || 'Unassigned'
@@ -30,7 +30,7 @@ async function load() {
   const [c,d,s,h]=await Promise.all([
    db.from('competitions').select('id,name,school_year,status').eq('organiser_school_id',schoolId.value).eq('competition_type','intra_school').order('school_year',{ascending:false}),
    db.from('event_definitions').select('id,name'),
-   db.from('students').select('id,student_number,given_name,family_name').eq('school_id',schoolId.value).order('family_name').limit(3000),
+   db.from('students').select('id,student_number,given_name,family_name,is_active').eq('school_id',schoolId.value).order('family_name').limit(3000),
    db.from('school_houses').select('id,name').eq('school_id',schoolId.value)
   ])
   for(const r of [c,d,s,h])if(r.error)throw r.error
