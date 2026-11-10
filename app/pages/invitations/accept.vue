@@ -63,7 +63,7 @@ watch(user, async (currentUser) => {
       <h1>School Administrator Invitation</h1>
       <p v-if="checking">Checking your invitation and account…</p>
       <template v-else>
-        <p v-if="success" class="success" role="status">{{ success }} <NuxtLink to="/dashboard"><u>Go to dashboard</u></NuxtLink></p>
+        <p v-if="success" class="success" role="status">{{ success }} <NuxtLink to="/school/dashboard"><u>Go to dashboard</u></NuxtLink></p>
         <p v-else-if="busy">Activating your School Administrator access…</p>
         <template v-else-if="error">
           <p class="error" role="alert">{{ error }}</p>
