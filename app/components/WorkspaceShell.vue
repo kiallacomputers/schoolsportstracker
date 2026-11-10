@@ -20,12 +20,14 @@ const links = computed(() => {
     {label:'Staff',to:'/admin/staff',icon:'👥'},
     {label:'Houses',to:'/admin/houses',icon:'🏠'},
     {label:'Competitions',to:'/admin/competitions',icon:'🏆'},
-    {label:'Email Settings',to:'/admin/email',icon:'✉'}
+    {label:'Email Settings',to:'/admin/email',icon:'✉'},
+    ...(typeof route.query.school === 'string' && route.query.school ? [{label:'Year Rollover',to:'/school/rollover?school='+encodeURIComponent(route.query.school),icon:'📅'}] : [])
   ]
   if (!activeSchool.value) return []
   const suffix = '?school=' + encodeURIComponent(activeSchool.value)
   return [
     {label:'Students',to:'/school/students'+suffix,icon:'🎓'},
+    ...(memberships.value.find(m=>m.school_id===activeSchool.value)?.role === 'school_admin' ? [{label:'Year Rollover',to:'/school/rollover'+suffix,icon:'📅'}] : []),
     {label:'Staff',to:'/school/staff'+suffix,icon:'👥'},
     {label:'Houses',to:'/school/houses'+suffix,icon:'🏠'},
     {label:'Competitions',to:'/school/competitions'+suffix,icon:'🏆'},

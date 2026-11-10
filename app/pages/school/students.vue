@@ -18,32 +18,6 @@ function requestSave() {
   if (!form.value.student_number.trim() || !form.value.given_name.trim() || !form.value.family_name.trim()) { modalError.value = 'Student number, first name and last name are required.'; return }
   confirmSave.value = true
 }
-const rolloverOpen = ref(false), rolloverConfirm = ref(''), rolloverBusy = ref(false), rolloverError = ref('')
-const rolloverPreview = computed(() => {
-  const active = rows.value.filter(s => s.is_active !== false)
-  const current = active.map(s => ({ student:s, enrolment:enrolmentFor(s.id) })).filter(x => x.enrolment)
-  return {
-    promoted: current.filter(x => /^(7|8|9|10|11)$/.test(String(x.enrolment.year_level || '').trim())).length,
-    graduated: current.filter(x => String(x.enrolment.year_level || '').trim() === '12').length,
-    skipped: current.filter(x => !/^(7|8|9|10|11|12)$/.test(String(x.enrolment.year_level || '').trim())).length
-  }
-})
-function openRollover() { rolloverConfirm.value = ''; rolloverError.value = ''; rolloverOpen.value = true }
-async function runRollover() {
-  if (!canEdit.value || rolloverBusy.value || rolloverConfirm.value.trim() !== String(year.value + 1)) return
-  rolloverBusy.value = true; rolloverError.value = ''; notice.value = ''; error.value = ''
-  try {
-    const result = await db.rpc('school_rollover_students', {p_school:schoolId.value,p_from_year:year.value})
-    if (result.error) throw result.error
-    const r:any = Array.isArray(result.data) ? result.data[0] : result.data
-    rolloverOpen.value = false
-    const nextYear = year.value + 1
-    year.value = nextYear
-    await load()
-    notice.value = `Rollover completed: ${r?.promoted_count ?? 0} promoted, ${r?.graduated_count ?? 0} Year 12 students disabled, ${r?.skipped_count ?? 0} skipped. Now viewing ${nextYear}.`
-  } catch(e:any) { rolloverError.value = e.message || 'Rollover failed; no changes were saved.' }
-  finally { rolloverBusy.value = false }
-}
 const csvPreview = ref<any[]>([]), importing = ref(false), importReport = ref('')
 const display = computed(() => rows.value.filter(s => (statusFilter.value === 'all' || (statusFilter.value === 'active' ? s.is_active !== false : s.is_active === false)) && `${s.given_name} ${s.family_name} ${s.student_number}`.toLowerCase().includes(search.value.toLowerCase())))
 const enrolmentFor = (id:string) => enrolments.value.find(e => e.student_id === id)
@@ -175,18 +149,7 @@ async function importCsv() {
   <p class="notice">Student records are restricted to your school. School Administrators can edit, disable and reactivate students. Only SuperAdmins can permanently delete student records.</p>
   <p v-if="error" class="error" role="alert">{{error}}</p><p v-if="notice" class="notice" role="status">{{notice}}</p>
   <div class="card" style="margin-bottom:1rem"><label class="field">School year <input v-model.number="year" type="number" min="2000" max="2200" /></label></div>
-  <div v-if="canEdit" style="display:flex;justify-content:flex-end;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem"><button class="btn" type="button" @click="openRollover">Roll Over School Year</button><button class="btn" type="button" @click="startAdd">+ Add Student</button></div>
-  <div v-if="rolloverOpen" class="student-modal-backdrop" @click.self="!rolloverBusy && (rolloverOpen=false)">
-    <section class="student-modal card" role="dialog" aria-modal="true" aria-labelledby="rollover-title">
-      <h2 id="rollover-title">Student Year Rollover: {{year}} → {{year + 1}}</h2>
-      <p>This will promote active students in Years 7–11 by one year, preserve their houses, and disable active Year 12 students. All previous-year records and results are retained.</p>
-      <p><strong>Preview:</strong> {{rolloverPreview.promoted}} to promote · {{rolloverPreview.graduated}} Year 12 students to disable · {{rolloverPreview.skipped}} active students with unsupported/missing year levels to skip.</p>
-      <p class="student-confirm"><strong>Warning:</strong> This is a school-wide operation. If any enrolments already exist for {{year+1}}, the operation will be cancelled rather than overwrite them. Check your student data before continuing.</p>
-      <p v-if="rolloverError" class="error" role="alert">{{rolloverError}}</p>
-      <label class="field">Type <strong>{{year+1}}</strong> to confirm<input v-model="rolloverConfirm" :disabled="rolloverBusy" inputmode="numeric" placeholder="New school year" /></label>
-      <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1rem"><button class="btn" type="button" :disabled="rolloverBusy || rolloverConfirm.trim() !== String(year+1)" @click="runRollover">{{rolloverBusy?'Rolling over…':'Confirm Year Rollover'}}</button><button class="btn" type="button" :disabled="rolloverBusy" @click="rolloverOpen=false">Cancel</button></div>
-    </section>
-  </div>
+  <div v-if="canEdit" style="display:flex;justify-content:flex-end;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem"><button class="btn" type="button" @click="startAdd">+ Add Student</button></div>
   <div v-if="modalOpen" class="student-modal-backdrop" @click.self="closeModal">
     <section class="student-modal card" role="dialog" aria-modal="true" aria-labelledby="student-modal-title">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem"><h2 id="student-modal-title">{{editing?'Edit Student':'Add Student'}}</h2><button type="button" class="btn" :disabled="saving" aria-label="Close" @click="closeModal">✕</button></div>
