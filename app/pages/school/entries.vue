@@ -25,7 +25,7 @@ async function load() {
   const member=await db.from('school_memberships').select('role,schools(name)').eq('user_id',user.id).eq('school_id',schoolId.value).maybeSingle()
   if(member.error)throw member.error
   if(!member.data || !['school_admin','teacher'].includes(member.data.role))throw new Error('You do not have access to this school.')
-  canEdit.value=member.data.role==='school_admin'
+  canEdit.value=['school_admin','teacher'].includes(member.data.role)
   schoolName.value=(member.data.schools as any)?.name||'School'
   const [c,d,s,h]=await Promise.all([
    db.from('competitions').select('id,name,school_year,status').eq('organiser_school_id',schoolId.value).eq('competition_type','intra_school').order('school_year',{ascending:false}),
@@ -91,7 +91,7 @@ onMounted(load)
  <div class="page"><div class="shell admin-section">
   <NuxtLink to="/school/dashboard">← School Dashboard</NuxtLink>
   <h1>{{schoolName}} — Event Registrations</h1>
-  <p class="notice">Register enrolled students for individual events. Age groups and divisions are displayed for staff to verify; automatic age and division eligibility checks are not yet configured.</p>
+  <p class="notice">Register enrolled students for individual events. Students may register themselves from their Student Portal. Authorised staff can also register students here. Age-group and division eligibility must be verified manually until rules are configured.</p>
   <p v-if="busy">Loading registrations…</p>
   <p v-if="error" class="error" role="alert">{{error}}</p>
   <p v-if="notice" class="notice" role="status">{{notice}}</p>
