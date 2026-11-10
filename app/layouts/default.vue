@@ -91,7 +91,7 @@ onUnmounted(() => {
       <div class="flex justify-center border-b border-slate-800 px-5 py-6">
         <NuxtLink to="/dashboard" aria-label="School Sports Tracker dashboard" class="block">
           <img
-            src="/images/school-sports-tracker-logo.png"
+            :src="'/images/school-sports-tracker-logo.png'"
             alt="School Sports Tracker"
             class="h-36 w-36 object-contain drop-shadow-2xl"
           />
@@ -130,7 +130,7 @@ onUnmounted(() => {
       class="sticky top-0 z-50 flex items-center justify-between border-b border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur md:hidden"
     >
       <NuxtLink to="/dashboard" aria-label="School Sports Tracker dashboard">
-        <img src="/images/school-sports-tracker-logo.png" alt="School Sports Tracker" class="h-16 w-16 object-contain" />
+        <img :src="'/images/school-sports-tracker-logo.png'" alt="School Sports Tracker" class="h-16 w-16 object-contain" />
       </NuxtLink>
 
       <button

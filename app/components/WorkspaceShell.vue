@@ -69,7 +69,7 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
     <div v-if="mobileOpen" class="shade" @click="mobileOpen=false"></div>
     <aside class="side" :class="{'open':mobileOpen}">
       <NuxtLink class="brand" to="/dashboard" @click="mobileOpen=false">
-        <img src="/images/school-sports-tracker-logo.png" alt="School Sports Tracker" />
+        <img :src="'/images/school-sports-tracker-logo.png'" alt="School Sports Tracker" />
         <span><strong>School Sports Tracker</strong><small>COMPETE · ACHIEVE · INSPIRE</small></span>
       </NuxtLink>
       <div class="role">{{ roleLabel }}</div>
