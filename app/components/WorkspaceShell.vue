@@ -10,11 +10,11 @@ const desktopCollapsed = ref(false)
 const ready = ref(false)
 const openFlyout = ref<string | null>(null)
 const flyoutTop = ref(100)
-const canManageSchool = computed(() => !!activeSchool.value && memberships.value.some(m => m.school_id === activeSchool.value && m.role === 'school_admin'))
-const canAssign = computed(() => !!activeSchool.value && memberships.value.some(m => m.school_id === activeSchool.value && ['school_admin','teacher'].includes(m.role)))
+const canManageSchool = computed(() => !!activeSchool.value && (platformAdmin.value || memberships.value.some(m => m.school_id === activeSchool.value && m.role === 'school_admin')))
+const canAssign = computed(() => !!activeSchool.value && (platformAdmin.value || memberships.value.some(m => m.school_id === activeSchool.value && ['school_admin','teacher'].includes(m.role))))
 const submenuItems = computed(() => ({
   Students: [{label:'View Students',action:'view'}, ...(canManageSchool.value?[{label:'Add Student',action:'add'}]:[])],
-  Staff: [{label:'View Staff',action:'view'}, ...(canManageSchool.value?[{label:'Invite Staff',action:'invite'}]:[])],
+  Staff: [{label:'View Staff',action:'view'}, ...(canManageSchool.value?[{label:'Assign Staff',action:'assign'},{label:'Invite Staff',action:'invite'}]:[])],
   Houses: [{label:'View Houses',action:'view'}, ...(canManageSchool.value?[{label:'Add House',action:'add'}]:[])],
   Competitions: [{label:'View Competitions',action:'view'}, ...(canManageSchool.value?[{label:'Add Competition',action:'add'},{label:'Add Event',action:'event'}]:[])],
   'Event Registrations': [{label:'View Registrations',action:'view'}, ...(canAssign.value?[{label:'Assign Student',action:'add'}]:[])],
@@ -38,7 +38,17 @@ async function chooseFlyout(item:any,action:string){
   openFlyout.value=null;mobileOpen.value=false
   const path=item.to.split('?')[0]
   if(action==='view'){await navigateTo(item.to);return}
-  await navigateTo({path,query:{school:activeSchool.value,action}})
+  if(!activeSchool.value){
+    // A platform administrator must select a school before creating school-scoped records.
+    await navigateTo(item.to)
+    return
+  }
+  const schoolPages: Record<string,string> = {
+    Students:'/school/students', Staff:'/school/staff', Houses:'/school/houses',
+    Competitions:'/school/competitions', 'Event Registrations':'/school/entries',
+    'Results & House Points':'/school/results'
+  }
+  await navigateTo({path:schoolPages[item.label] || path,query:{school:activeSchool.value,action}})
 }
 const roleLabel = computed(() => platformAdmin.value ? 'Platform Administration' : memberships.value.find(m => m.school_id === activeSchool.value)?.role === 'school_admin' ? 'School Administrator' : 'School Staff')
 const schoolName = computed(() => memberships.value.find(m => m.school_id === activeSchool.value)?.schools?.name || 'School Sports Tracker')
@@ -52,6 +62,10 @@ const links = computed(() => {
     {label:'Staff',to:'/admin/staff',icon:'👥'},
     {label:'Houses',to:'/admin/houses',icon:'🏠'},
     {label:'Competitions',to:'/admin/competitions',icon:'🏆'},
+    ...(activeSchool.value ? [
+      {label:'Event Registrations',to:'/school/entries?school='+encodeURIComponent(activeSchool.value),icon:'📝'},
+      {label:'Results & House Points',to:'/school/results?school='+encodeURIComponent(activeSchool.value),icon:'🥇'}
+    ] : []),
     {label:'Email Settings',to:'/admin/email',icon:'✉'},
     ...(typeof route.query.school === 'string' && route.query.school ? [{label:'Year Rollover',to:'/school/rollover?school='+encodeURIComponent(route.query.school),icon:'📅'}] : [])
   ]
@@ -73,6 +87,9 @@ async function checkAccess() {
     const {data:{user}} = await db.auth.getUser()
     if (!user) { await navigateTo('/login'); return }
     platformAdmin.value = await verify()
+    if (platformAdmin.value) {
+      activeSchool.value = typeof route.query.school === 'string' ? route.query.school : ''
+    }
     if (!platformAdmin.value) {
       const {data,error} = await db.from('school_memberships').select('school_id,role,schools(name)').eq('user_id',user.id)
       if (error) throw error
@@ -87,7 +104,7 @@ async function checkAccess() {
 }
 onMounted(checkAccess)
 watch(() => route.query.school, (id) => {
-  if (typeof id === 'string' && memberships.value.some(m=>m.school_id === id)) activeSchool.value = id
+  if (typeof id === 'string' && (platformAdmin.value || memberships.value.some(m=>m.school_id === id))) activeSchool.value = id
 })
 watch(() => route.path, () => { mobileOpen.value = false; openFlyout.value = null })
 watch(activeSchool, async (id,old) => {
@@ -105,7 +122,7 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
     <div v-if="mobileOpen" class="shade" @click="mobileOpen=false"></div>
     <aside class="side" :class="{'open':mobileOpen, 'collapsed':desktopCollapsed}">
       <NuxtLink class="brand" to="/dashboard" @click="mobileOpen=false">
-        <img :src="'/logo.png'" alt="School Sports Tracker" />
+        <img src="/logo.png" alt="School Sports Tracker" />
         <span><strong>School Sports Tracker</strong><small>COMPETE · ACHIEVE · INSPIRE</small></span>
       </NuxtLink>
       <div class="role">{{ roleLabel }}</div>
@@ -115,7 +132,7 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
       <nav class="nav" aria-label="Administration navigation">
         <NuxtLink :to="platformAdmin ? '/dashboard' : '/dashboard?school='+encodeURIComponent(activeSchool)" class="item" :class="{'current':route.path==='/dashboard'}" @click="mobileOpen=false"><span>▦</span> Dashboard</NuxtLink>
         <template v-for="item in links" :key="item.to">
-          <div v-if="!platformAdmin && flyoutSections.includes(item.label)" class="student-menu-anchor">
+          <div v-if="flyoutSections.includes(item.label)" class="student-menu-anchor">
             <button type="button" class="item student-menu-trigger" :class="{'current':selected(item.to)}" :aria-expanded="openFlyout===item.label" @click="toggleFlyout(item.label,$event)">
               <span>{{item.icon}}</span>{{item.label}}<span class="menu-chevron">{{openFlyout===item.label?'‹':'›'}}</span>
             </button>
