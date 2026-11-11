@@ -14,7 +14,7 @@ const canManageSchool = computed(() => !!activeSchool.value && memberships.value
 const canAssign = computed(() => !!activeSchool.value && memberships.value.some(m => m.school_id === activeSchool.value && ['school_admin','teacher'].includes(m.role)))
 const submenuItems = computed(() => ({
   Students: [{label:'View Students',action:'view'}, ...(canManageSchool.value?[{label:'Add Student',action:'add'}]:[])],
-  Staff: [{label:'View Staff',action:'view'}, ...(canManageSchool.value?[{label:'Assign Staff',action:'assign'},{label:'Invite Staff',action:'invite'}]:[])],
+  Staff: [{label:'View Staff',action:'view'}, ...(canManageSchool.value?[{label:'Invite Staff',action:'invite'}]:[])],
   Houses: [{label:'View Houses',action:'view'}, ...(canManageSchool.value?[{label:'Add House',action:'add'}]:[])],
   Competitions: [{label:'View Competitions',action:'view'}, ...(canManageSchool.value?[{label:'Add Competition',action:'add'},{label:'Add Event',action:'event'}]:[])],
   'Event Registrations': [{label:'View Registrations',action:'view'}, ...(canAssign.value?[{label:'Assign Student',action:'add'}]:[])],
@@ -105,7 +105,7 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
     <div v-if="mobileOpen" class="shade" @click="mobileOpen=false"></div>
     <aside class="side" :class="{'open':mobileOpen, 'collapsed':desktopCollapsed}">
       <NuxtLink class="brand" to="/dashboard" @click="mobileOpen=false">
-        <img :src="'/images/school-sports-tracker-logo.png'" alt="School Sports Tracker" />
+        <img :src="'/logo.png'" alt="School Sports Tracker" />
         <span><strong>School Sports Tracker</strong><small>COMPETE · ACHIEVE · INSPIRE</small></span>
       </NuxtLink>
       <div class="role">{{ roleLabel }}</div>
