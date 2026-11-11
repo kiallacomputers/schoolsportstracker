@@ -6,6 +6,10 @@ const busy = ref(true), saving = ref(false), error = ref(''), notice = ref('')
 const schoolName = ref(''), canEdit = ref(false), isSuperAdmin = ref(false), statusFilter = ref('active')
 const rows = ref<any[]>([]), houses = ref<any[]>([]), enrolments = ref<any[]>([])
 const year = ref(new Date().getFullYear()), search = ref('')
+const selectedHouseId = computed(() => typeof route.query.house === 'string' ? route.query.house : '')
+const selectedHouse = computed(() => houses.value.find(h => h.id === selectedHouseId.value))
+function houseStudentsUrl(houseId: string) { return { path: '/school/students', query: { school: schoolId.value, house: houseId } } }
+function clearHouseFilter() { const query = { ...route.query }; delete query.house; navigateTo({ path: route.path, query }) }
 const blank = () => ({id:'',student_number:'',given_name:'',family_name:'',date_of_birth:'',year_level:'',house_id:''})
 const form = ref(blank()), editing = ref(false)
 const modalOpen = ref(false)
@@ -45,7 +49,7 @@ function requestSave() {
   confirmSave.value = true
 }
 const csvPreview = ref<any[]>([]), importing = ref(false), importReport = ref('')
-const display = computed(() => rows.value.filter(s => (statusFilter.value === 'all' || (statusFilter.value === 'active' ? s.is_active !== false : s.is_active === false)) && `${s.given_name} ${s.family_name} ${s.student_number}`.toLowerCase().includes(search.value.toLowerCase())))
+const display = computed(() => rows.value.filter(s => (!selectedHouseId.value || enrolmentFor(s.id)?.house_id === selectedHouseId.value) && (statusFilter.value === 'all' || (statusFilter.value === 'active' ? s.is_active !== false : s.is_active === false)) && `${s.given_name} ${s.family_name} ${s.student_number}`.toLowerCase().includes(search.value.toLowerCase())))
 const enrolmentFor = (id:string) => enrolments.value.find(e => e.student_id === id)
 async function load() {
   error.value = ''; busy.value = true
@@ -199,12 +203,17 @@ async function importCsv() {
       <div style="display:flex;gap:.75rem;margin-top:1rem;flex-wrap:wrap"><button v-if="csvPreview.length" type="button" class="btn" :disabled="importing" @click="importCsv">{{importing?'Importing…':'Import Students'}}</button><button type="button" class="btn" :disabled="importing" @click="closeImportModal">Close</button></div>
     </section>
   </div>
-  <section class="card"><h2>Students ({{display.length}})</h2><label class="field">Show students<select v-model="statusFilter"><option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All students</option></select></label><input v-model="search" placeholder="Search by name or student number" aria-label="Search students" /><p v-if="busy">Loading…</p><div v-for="s in display" :key="s.id" class="data-row" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap"><div class="student-identity"><span class="student-house-tile" :style="{ backgroundColor: houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.colour || '#58677d' }" :title="houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name || 'No house assigned'" :aria-label="`House: ${houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name || 'Not assigned'}`">{{ (houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name || '—').charAt(0).toUpperCase() }}</span><div><strong>{{s.family_name}}, {{s.given_name}}</strong><small style="display:block">{{s.is_active === false ? 'Inactive · ' : ''}}{{s.student_number}} · Year {{enrolmentFor(s.id)?.year_level||'—'}} · {{houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name||'No house'}}</small></div></div><div v-if="canEdit" style="display:flex;gap:.5rem"><button class="btn" @click="startEdit(s)">Edit</button><button class="btn" :disabled="saving" @click="setStudentActive(s, s.is_active === false)">{{s.is_active === false ? 'Reactivate' : 'Disable'}}</button><button v-if="isSuperAdmin" class="btn" :disabled="saving" @click="remove(s)">Delete Permanently</button></div></div><p v-if="!busy&&!display.length">No students found.</p></section>
+  <section class="card"><div v-if="selectedHouseId" class="house-filter-heading"><div><h2>{{ selectedHouse?.name || 'Selected House' }} — Students ({{display.length}})</h2><p>Students assigned to this house for {{year}}.</p></div><button type="button" class="btn" @click="clearHouseFilter">View All Students</button></div><h2 v-else>Students ({{display.length}})</h2><label class="field">Show students<select v-model="statusFilter"><option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All students</option></select></label><input v-model="search" placeholder="Search by name or student number" aria-label="Search students" /><p v-if="busy">Loading…</p><div v-for="s in display" :key="s.id" class="data-row" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap"><div class="student-identity"><NuxtLink v-if="enrolmentFor(s.id)?.house_id" class="student-house-tile student-house-link" :to="houseStudentsUrl(enrolmentFor(s.id).house_id)" :style="{ backgroundColor: houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.colour || '#58677d' }" :title="`View all students in ${houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name || 'this house'}`" :aria-label="`View students in ${houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name || 'this house'}`">{{ (houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name || '—').charAt(0).toUpperCase() }}</NuxtLink><span v-else class="student-house-tile" style="background-color:#58677d" title="No house assigned" aria-label="No house assigned">—</span><div><strong>{{s.family_name}}, {{s.given_name}}</strong><small style="display:block">{{s.is_active === false ? 'Inactive · ' : ''}}{{s.student_number}} · Year {{enrolmentFor(s.id)?.year_level||'—'}} · {{houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name||'No house'}}</small></div></div><div v-if="canEdit" style="display:flex;gap:.5rem"><button class="btn" @click="startEdit(s)">Edit</button><button class="btn" :disabled="saving" @click="setStudentActive(s, s.is_active === false)">{{s.is_active === false ? 'Reactivate' : 'Disable'}}</button><button v-if="isSuperAdmin" class="btn" :disabled="saving" @click="remove(s)">Delete Permanently</button></div></div><p v-if="!busy&&!display.length">No students found.</p></section>
 </div></div>
 </template>
 
 <style scoped>
 .student-identity { display:flex; align-items:center; gap:.85rem; min-width:0; }
+.student-house-link { text-decoration:none; cursor:pointer; }
+.student-house-link:hover { filter:brightness(1.15); transform:translateY(-1px); }
+.student-house-link:focus-visible { outline:3px solid #fbbf24; outline-offset:3px; }
+.house-filter-heading { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:.75rem; }
+.house-filter-heading h2 { margin:0; }
 .student-house-tile { width:42px; height:42px; flex:0 0 42px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; color:#fff; font-size:1.25rem; font-weight:800; border:1px solid rgba(255,255,255,.3); text-shadow:0 1px 3px rgba(0,0,0,.8); box-shadow:0 1px 3px rgba(0,0,0,.15); }
 
 .student-modal-backdrop { position:fixed;inset:0;z-index:1000;background:rgba(6,17,37,.78);display:flex;align-items:center;justify-content:center;padding:1rem;overflow-y:auto }

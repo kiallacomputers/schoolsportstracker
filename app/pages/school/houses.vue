@@ -256,7 +256,7 @@ onMounted(load)
         <div class="card">
           <h2>School Houses</h2>
           <div v-for="house in rows" :key="house.id" class="data-row house-row">
-            <span>{{ house.name }}</span>
+            <NuxtLink :to="{ path: '/school/students', query: { school: schoolId, house: house.id } }" :title="`View students in ${house.name}`">{{ house.name }} — View Students</NuxtLink>
             <div class="house-actions">
               <span class="house-colour" :style="{ backgroundColor: validColour(house.colour) }" :aria-label="`${house.name} house colour`" :title="validColour(house.colour)" role="img"></span>
               <template v-if="canManage">
