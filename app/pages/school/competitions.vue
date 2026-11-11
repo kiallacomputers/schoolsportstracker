@@ -33,8 +33,10 @@ async function load() {
     if(!schoolId.value) throw new Error('Select a school from the School Dashboard.')
     const member=await db.from('school_memberships').select('role,schools(name)').eq('school_id',schoolId.value).eq('user_id',user.id).maybeSingle()
     if(member.error) throw member.error
-    if(!member.data || !['school_admin','teacher'].includes(member.data.role)) throw new Error('You do not have access to this school.')
-    canEdit.value=member.data.role==='school_admin'
+    const platform=await db.rpc('is_platform_admin')
+    if(platform.error)throw platform.error
+    if(!platform.data && (!member.data || !['school_admin','teacher'].includes(member.data.role))) throw new Error('You do not have access to this school.')
+    canEdit.value=platform.data===true || member.data?.role==='school_admin'
     schoolName.value=(member.data.schools as any)?.name || 'School'
     const [sp,defs,owned,joined]=await Promise.all([
       db.from('sports').select('id,name').order('name'),

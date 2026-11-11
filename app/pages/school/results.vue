@@ -33,8 +33,8 @@ async function fetchEvents(){events.value=[];eventId.value='';results.value=[];i
 async function load(){loading.value=true;error.value='';try{
  const {data:{user}}=await db.auth.getUser();if(!user){await navigateTo('/login');return}
  if(!schoolId.value)throw new Error('Select a school from the School Dashboard.')
- const member=await db.from('school_memberships').select('role').eq('user_id',user.id).eq('school_id',schoolId.value).maybeSingle();if(member.error)throw member.error;if(!member.data)throw new Error('You do not have access to this school.')
- canEdit.value=['school_admin','teacher'].includes(member.data.role)
+ const member=await db.from('school_memberships').select('role').eq('user_id',user.id).eq('school_id',schoolId.value).maybeSingle();if(member.error)throw member.error;const platform=await db.rpc('is_platform_admin');if(platform.error)throw platform.error;if(!platform.data && !member.data)throw new Error('You do not have access to this school.')
+ canEdit.value=platform.data===true || ['school_admin','teacher'].includes(member.data?.role)
  const [c,d]=await Promise.all([db.from('competitions').select('id,name,school_year,status').eq('organiser_school_id',schoolId.value).eq('competition_type','intra_school').order('school_year',{ascending:false}),db.from('event_definitions').select('id,name')]);if(c.error)throw c.error;if(d.error)throw d.error
  competitions.value=c.data||[];definitions.value=d.data||[];competitionId.value=competitions.value[0]?.id||'';await fetchEvents()
  }catch(e:any){error.value=e.message||'Unable to load results.'}finally{loading.value=false}}

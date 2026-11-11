@@ -4,6 +4,7 @@ const { verify } = useAdmin()
 const route = useRoute()
 const platformAdmin = ref(false)
 const memberships = ref<any[]>([])
+const allSchools = ref<any[]>([])
 const activeSchool = ref('')
 const mobileOpen = ref(false)
 const desktopCollapsed = ref(false)
@@ -51,24 +52,27 @@ async function chooseFlyout(item:any,action:string){
   await navigateTo({path:schoolPages[item.label] || path,query:{school:activeSchool.value,action}})
 }
 const roleLabel = computed(() => platformAdmin.value ? 'Platform Administration' : memberships.value.find(m => m.school_id === activeSchool.value)?.role === 'school_admin' ? 'School Administrator' : 'School Staff')
-const schoolName = computed(() => memberships.value.find(m => m.school_id === activeSchool.value)?.schools?.name || 'School Sports Tracker')
-const schoolOptions = computed(() => memberships.value.map(m => ({ id:m.school_id, name:m.schools?.name || 'School' })))
+const schoolName = computed(() => (platformAdmin.value ? allSchools.value.find(s => s.id === activeSchool.value)?.name : memberships.value.find(m => m.school_id === activeSchool.value)?.schools?.name) || 'School Sports Tracker')
+const schoolOptions = computed(() => platformAdmin.value ? allSchools.value : memberships.value.map(m => ({ id:m.school_id, name:m.schools?.name || 'School' })))
 const links = computed(() => {
-  if (platformAdmin.value) return [
-    {label:'Schools',to:'/admin/schools',icon:'🏫'},
-    {label:'School Requests',to:'/admin/school-requests',icon:'📨'},
-    {label:'Students',to:'/admin/students',icon:'🎓'},
-    {label:'Student Approvals',to:'/admin/student-requests',icon:'✓'},
-    {label:'Staff',to:'/admin/staff',icon:'👥'},
-    {label:'Houses',to:'/admin/houses',icon:'🏠'},
-    {label:'Competitions',to:'/admin/competitions',icon:'🏆'},
-    ...(activeSchool.value ? [
-      {label:'Event Registrations',to:'/school/entries?school='+encodeURIComponent(activeSchool.value),icon:'📝'},
-      {label:'Results & House Points',to:'/school/results?school='+encodeURIComponent(activeSchool.value),icon:'🥇'}
-    ] : []),
-    {label:'Email Settings',to:'/admin/email',icon:'✉'},
-    ...(typeof route.query.school === 'string' && route.query.school ? [{label:'Year Rollover',to:'/school/rollover?school='+encodeURIComponent(route.query.school),icon:'📅'}] : [])
-  ]
+  if (platformAdmin.value) {
+    const suffix = activeSchool.value ? '?school=' + encodeURIComponent(activeSchool.value) : ''
+    return [
+      {label:'Schools',to:'/admin/schools',icon:'🏫'},
+      {label:'School Requests',to:'/admin/school-requests',icon:'📨'},
+      {label:'Student Approvals',to:'/admin/student-requests',icon:'✓'},
+      {label:'Email Settings',to:'/admin/email',icon:'✉'},
+      ...(activeSchool.value ? [
+        {label:'Students',to:'/school/students'+suffix,icon:'🎓'},
+        {label:'Year Rollover',to:'/school/rollover'+suffix,icon:'📅'},
+        {label:'Staff',to:'/school/staff'+suffix,icon:'👥'},
+        {label:'Houses',to:'/school/houses'+suffix,icon:'🏠'},
+        {label:'Competitions',to:'/school/competitions'+suffix,icon:'🏆'},
+        {label:'Event Registrations',to:'/school/entries'+suffix,icon:'📝'},
+        {label:'Results & House Points',to:'/school/results'+suffix,icon:'🥇'}
+      ] : [])
+    ]
+  }
   if (!activeSchool.value) return []
   const suffix = '?school=' + encodeURIComponent(activeSchool.value)
   return [
@@ -88,7 +92,11 @@ async function checkAccess() {
     if (!user) { await navigateTo('/login'); return }
     platformAdmin.value = await verify()
     if (platformAdmin.value) {
-      activeSchool.value = typeof route.query.school === 'string' ? route.query.school : ''
+      const {data:schools,error:schoolsError} = await db.from('schools').select('id,name').order('name')
+      if (schoolsError) throw schoolsError
+      allSchools.value = schools || []
+      const requested = typeof route.query.school === 'string' ? route.query.school : ''
+      activeSchool.value = allSchools.value.some(s => s.id === requested) ? requested : (allSchools.value[0]?.id || '')
     }
     if (!platformAdmin.value) {
       const {data,error} = await db.from('school_memberships').select('school_id,role,schools(name)').eq('user_id',user.id)
@@ -104,12 +112,12 @@ async function checkAccess() {
 }
 onMounted(checkAccess)
 watch(() => route.query.school, (id) => {
-  if (typeof id === 'string' && (platformAdmin.value || memberships.value.some(m=>m.school_id === id))) activeSchool.value = id
+  if (typeof id === 'string' && (platformAdmin.value ? allSchools.value.some(s=>s.id===id) : memberships.value.some(m=>m.school_id === id))) activeSchool.value = id
 })
 watch(() => route.path, () => { mobileOpen.value = false; openFlyout.value = null })
 watch(activeSchool, async (id,old) => {
   openFlyout.value = null
-  if (!id || !old || id===old || platformAdmin.value) return
+  if (!id || !old || id===old) return
   const path = route.path
   if (path.startsWith('/school/')) await navigateTo({path,query:{...route.query,school:id}})
   else if (path === '/dashboard') await navigateTo({path:'/dashboard',query:{...route.query,school:id}})
@@ -126,7 +134,7 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
         <span><strong>School Sports Tracker</strong><small>COMPETE · ACHIEVE · INSPIRE</small></span>
       </NuxtLink>
       <div class="role">{{ roleLabel }}</div>
-      <label v-if="!platformAdmin && schoolOptions.length>1" class="school-select">School
+      <label v-if="schoolOptions.length>0 && (platformAdmin || schoolOptions.length>1)" class="school-select">School
         <select v-model="activeSchool"><option v-for="s in schoolOptions" :key="s.id" :value="s.id">{{ s.name }}</option></select>
       </label>
       <nav class="nav" aria-label="Administration navigation">
