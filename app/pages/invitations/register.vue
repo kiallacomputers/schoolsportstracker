@@ -23,20 +23,9 @@ async function register() {
   if (!redirect.value) { error.value = 'Invitation link is missing or invalid.'; return }
   busy.value = true
   try {
-    const { data, error: signupError } = await db.auth.signUp({
-      email: email.value.trim(),
-      password: password.value,
-      options: {
-        data: { full_name: `${firstName.value.trim()} ${lastName.value.trim()}` },
-        emailRedirectTo: `${window.location.origin}${redirect.value}`
-      }
-    })
-    if (signupError) throw signupError
-    if (data.session) {
-      await navigateTo(redirect.value)
-      return
-    }
-    message.value = 'Account created. Check your inbox and click the verification link. You will return to your invitation automatically. If prompted to sign in, your invitation will still be saved.'
+    const result = await $fetch<{email:string}>('/api/account/activate', {method:'POST',body:{kind:'school_admin',token:new URL(redirect.value,'https://example.invalid').searchParams.get('token'),password:password.value,firstName:firstName.value,lastName:lastName.value}})
+    message.value = 'Account created for '+result.email+'. Sign in to accept the invitation.'
+
   } catch (e: any) {
     error.value = e?.message || 'Unable to create account.'
   } finally {
@@ -56,7 +45,7 @@ onMounted(async () => {
     <NuxtLink class="brand" to="/"><img src="/logo.png" alt="School Sports Tracker logo"><div><strong>SCHOOL SPORTS TRACKER</strong><small>COMPETE · ACHIEVE · INSPIRE</small></div></NuxtLink>
     <form class="auth" style="max-width:none;margin-top:1.5rem;padding:2rem" @submit.prevent="register">
       <h1>Activate your School Administrator invitation</h1>
-      <p>Create your account using the email address that received the invitation. After verifying your email, we'll return you to your invitation and activate your access.</p>
+      <p>Create your account using the email address that received the invitation. After creating your account, sign in using the invitation link to activate your access.</p>
       <p v-if="!redirect" class="error" role="alert">Your invitation link is missing or invalid. Please use the link in the original invitation email.</p>
       <template v-else>
         <label class="field"><span>First name</span><input v-model="firstName" required maxlength="100" autocomplete="given-name"></label>
@@ -64,7 +53,7 @@ onMounted(async () => {
         <label class="field"><span>Invited email address</span><input v-model="email" required type="email" autocomplete="email"></label>
         <label class="field"><span>Password (minimum 8 characters)</span><input v-model="password" required type="password" minlength="8" autocomplete="new-password"></label>
         <p v-if="error" class="error" role="alert">{{ error }}</p>
-        <p v-if="message" class="success" role="status">{{ message }}</p>
+        <p v-if="message" class="success" role="status">{{ message }} <NuxtLink :to="loginPath">Sign in now</NuxtLink></p>
         <button class="btn" :disabled="busy || !!message">{{ busy ? 'Creating account…' : 'Create account & continue' }}</button>
         <p style="margin-top:1rem">Already have an account? <NuxtLink :to="loginPath"><u>Sign in instead</u></NuxtLink></p>
       </template>

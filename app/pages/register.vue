@@ -1,9 +1,1 @@
-<template>
-  <div class="page"><div class="shell admin-section">
-    <div class="card" style="max-width:600px;margin:2rem auto">
-      <h1>Invitation required</h1>
-      <p>New School Sports Tracker accounts are created by invitation only. Please contact your school administrator for access.</p>
-      <NuxtLink to="/login" class="btn">Return to Sign In</NuxtLink>
-    </div>
-  </div></div>
-</template>
+<template><div class="page"><div class="shell admin-section"><h1>Student accounts are not available yet</h1><p>Schools manage student records. Student sign-in will be introduced in a future phase.</p><NuxtLink to="/login">Return to sign in</NuxtLink></div></div></template>
