@@ -14,7 +14,7 @@ const canManageSchool = computed(() => !!activeSchool.value && memberships.value
 const canAssign = computed(() => !!activeSchool.value && memberships.value.some(m => m.school_id === activeSchool.value && ['school_admin','teacher'].includes(m.role)))
 const submenuItems = computed(() => ({
   Students: [{label:'View Students',action:'view'}, ...(canManageSchool.value?[{label:'Add Student',action:'add'}]:[])],
-  Staff: [{label:'View Staff',action:'view'}, ...(canManageSchool.value?[{label:'Invite Staff',action:'invite'}]:[])],
+  Staff: [{label:'View Staff',action:'view'}, ...(canManageSchool.value?[{label:'Assign Staff',action:'assign'},{label:'Invite Staff',action:'invite'}]:[])],
   Houses: [{label:'View Houses',action:'view'}, ...(canManageSchool.value?[{label:'Add House',action:'add'}]:[])],
   Competitions: [{label:'View Competitions',action:'view'}, ...(canManageSchool.value?[{label:'Add Competition',action:'add'},{label:'Add Event',action:'event'}]:[])],
   'Event Registrations': [{label:'View Registrations',action:'view'}, ...(canAssign.value?[{label:'Assign Student',action:'add'}]:[])],
