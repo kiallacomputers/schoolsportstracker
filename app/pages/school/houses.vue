@@ -14,6 +14,16 @@ const editingId = ref<string | null>(null)
 const deletingId = ref<string | null>(null)
 const notice = ref('')
 
+
+const actionModal = ref(false)
+const actionKind = ref('')
+function dismissAction(){
+  actionModal.value=false
+  if(typeof route.query.action==='string')navigateTo({path:route.path,query:{...route.query,action:undefined},replace:true})
+}
+watch(()=>route.query.action,(action)=>{
+  if(typeof action==='string' && action==='add'){actionKind.value=action;actionModal.value=true}
+},{immediate:true})
 // Always-visible HSV palette: no browser colour-picker popup required.
 const palette = ref<HTMLElement | null>(null)
 const hue = ref(217)
@@ -47,13 +57,14 @@ function hexToHsv(hex: string) {
 
 function editHouse(house: any) {
   if (role.value !== 'school_admin') return
+  actionKind.value='edit';actionModal.value=true
   editingId.value = house.id
   name.value = house.name
   colour.value = validColour(house.colour)
   const hsv = hexToHsv(colour.value)
   hue.value = hsv.h; saturation.value = hsv.s; brightness.value = hsv.v
   notice.value = ''; error.value = ''
-  document.getElementById('house-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
 }
 
 function cancelEdit() {
@@ -138,6 +149,7 @@ async function add() {
   if (result.error) { error.value = result.error.message; return }
   if (!result.data?.length) { error.value = 'No house was changed. Check your school permissions.'; return }
   notice.value = editingId.value ? 'House updated successfully.' : 'House added successfully.'
+  dismissAction()
   editingId.value = null
   name.value = ''
   await refresh()
@@ -170,7 +182,7 @@ onMounted(load)
       <p v-if="error" class="error" role="alert">{{ error }}</p>
       <p v-if="notice" role="status">{{ notice }}</p>
       <template v-if="!busy && schoolId">
-        <form v-if="role === 'school_admin'" id="house-editor" class="card house-editor" @submit.prevent="add">
+        <AdminActionModal :open="actionModal && role === 'school_admin'" :title="editingId ? 'Edit House' : 'Add House'" @close="dismissAction"><form id="house-editor" class="card house-editor" @submit.prevent="add">
           <h2>{{ editingId ? 'Edit House' : 'Add House' }}</h2>
           <label class="house-name">House name
             <input v-model="name" required maxlength="120" placeholder="e.g. Patrick" />
@@ -206,7 +218,7 @@ onMounted(load)
           </div>
           <button class="btn" :disabled="saving">{{ saving ? 'Saving…' : editingId ? 'Save Changes' : 'Add House' }}</button>
           <button v-if="editingId" type="button" class="btn cancel-btn" :disabled="saving" @click="cancelEdit">Cancel</button>
-        </form>
+        </form></AdminActionModal>
         <div class="card">
           <h2>School Houses</h2>
           <div v-for="house in rows" :key="house.id" class="data-row house-row">

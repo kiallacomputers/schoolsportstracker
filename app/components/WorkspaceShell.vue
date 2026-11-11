@@ -8,24 +8,37 @@ const activeSchool = ref('')
 const mobileOpen = ref(false)
 const desktopCollapsed = ref(false)
 const ready = ref(false)
-const studentFlyoutOpen = ref(false)
-const studentMenuAnchor = ref<HTMLElement | null>(null)
-function closeFlyoutOnOutsideClick(event: PointerEvent) {
-  if (!studentFlyoutOpen.value) return
-  const target = event.target
-  if (target instanceof Node && !studentMenuAnchor.value?.contains(target)) {
-    studentFlyoutOpen.value = false
-  }
+const openFlyout = ref<string | null>(null)
+const flyoutTop = ref(100)
+const canManageSchool = computed(() => !!activeSchool.value && memberships.value.some(m => m.school_id === activeSchool.value && m.role === 'school_admin'))
+const canAssign = computed(() => !!activeSchool.value && memberships.value.some(m => m.school_id === activeSchool.value && ['school_admin','teacher'].includes(m.role)))
+const submenuItems = computed(() => ({
+  Students: [{label:'View Students',action:'view'}, ...(canManageSchool.value?[{label:'Add Student',action:'add'}]:[])],
+  Staff: [{label:'View Staff',action:'view'}, ...(canManageSchool.value?[{label:'Invite Staff',action:'invite'}]:[])],
+  Houses: [{label:'View Houses',action:'view'}, ...(canManageSchool.value?[{label:'Add House',action:'add'}]:[])],
+  Competitions: [{label:'View Competitions',action:'view'}, ...(canManageSchool.value?[{label:'Add Competition',action:'add'},{label:'Add Event',action:'event'}]:[])],
+  'Event Registrations': [{label:'View Registrations',action:'view'}, ...(canAssign.value?[{label:'Assign Student',action:'add'}]:[])],
+  'Results & House Points': [{label:'View Results',action:'view'}, ...(canAssign.value?[{label:'Enter Result',action:'add'}]:[])]
+}))
+const flyoutSections = ['Students','Staff','Houses','Competitions','Event Registrations','Results & House Points']
+function toggleFlyout(label:string,event:MouseEvent){
+  if(openFlyout.value===label){openFlyout.value=null;return}
+  const el=event.currentTarget as HTMLElement
+  flyoutTop.value=Math.max(12,Math.min(el.getBoundingClientRect().top,window.innerHeight-240))
+  openFlyout.value=label
 }
-onMounted(() => document.addEventListener('pointerdown', closeFlyoutOnOutsideClick))
-onBeforeUnmount(() => document.removeEventListener('pointerdown', closeFlyoutOnOutsideClick))
-const studentMenuEnabled = computed(() => !platformAdmin.value && !!activeSchool.value && memberships.value.some(m => m.school_id === activeSchool.value && m.role === 'school_admin'))
-const studentPage = computed(() => '/school/students?school=' + encodeURIComponent(activeSchool.value))
-function openStudentAdd() {
-  if (!studentMenuEnabled.value) return
-  studentFlyoutOpen.value = false
-  mobileOpen.value = false
-  navigateTo({ path: '/school/students', query: { school: activeSchool.value, action: 'add' } })
+function outsideClick(event:PointerEvent){
+  if(!openFlyout.value)return
+  const target=event.target
+  if(target instanceof Element && !target.closest('.student-menu-anchor'))openFlyout.value=null
+}
+onMounted(()=>document.addEventListener('pointerdown',outsideClick))
+onBeforeUnmount(()=>document.removeEventListener('pointerdown',outsideClick))
+async function chooseFlyout(item:any,action:string){
+  openFlyout.value=null;mobileOpen.value=false
+  const path=item.to.split('?')[0]
+  if(action==='view'){await navigateTo(item.to);return}
+  await navigateTo({path,query:{school:activeSchool.value,action}})
 }
 const roleLabel = computed(() => platformAdmin.value ? 'Platform Administration' : memberships.value.find(m => m.school_id === activeSchool.value)?.role === 'school_admin' ? 'School Administrator' : 'School Staff')
 const schoolName = computed(() => memberships.value.find(m => m.school_id === activeSchool.value)?.schools?.name || 'School Sports Tracker')
@@ -76,9 +89,9 @@ onMounted(checkAccess)
 watch(() => route.query.school, (id) => {
   if (typeof id === 'string' && memberships.value.some(m=>m.school_id === id)) activeSchool.value = id
 })
-watch(() => route.path, () => { mobileOpen.value = false; studentFlyoutOpen.value = false })
+watch(() => route.path, () => { mobileOpen.value = false; openFlyout.value = null })
 watch(activeSchool, async (id,old) => {
-  studentFlyoutOpen.value = false
+  openFlyout.value = null
   if (!id || !old || id===old || platformAdmin.value) return
   const path = route.path
   if (path.startsWith('/school/')) await navigateTo({path,query:{...route.query,school:id}})
@@ -102,17 +115,16 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
       <nav class="nav" aria-label="Administration navigation">
         <NuxtLink :to="platformAdmin ? '/dashboard' : '/dashboard?school='+encodeURIComponent(activeSchool)" class="item" :class="{'current':route.path==='/dashboard'}" @click="mobileOpen=false"><span>▦</span> Dashboard</NuxtLink>
         <template v-for="item in links" :key="item.to">
-          <div v-if="item.label === 'Students' && studentMenuEnabled" class="student-menu-anchor" ref="studentMenuAnchor">
-            <button type="button" class="item student-menu-trigger" :class="{'current':route.path==='/school/students'}" :aria-expanded="studentFlyoutOpen" aria-controls="student-flyout" @click="studentFlyoutOpen=!studentFlyoutOpen">
-              <span>{{item.icon}}</span> Students <span class="menu-chevron">{{studentFlyoutOpen ? '‹' : '›'}}</span>
+          <div v-if="!platformAdmin && flyoutSections.includes(item.label)" class="student-menu-anchor">
+            <button type="button" class="item student-menu-trigger" :class="{'current':selected(item.to)}" :aria-expanded="openFlyout===item.label" @click="toggleFlyout(item.label,$event)">
+              <span>{{item.icon}}</span>{{item.label}}<span class="menu-chevron">{{openFlyout===item.label?'‹':'›'}}</span>
             </button>
-            <div v-if="studentFlyoutOpen" id="student-flyout" class="student-flyout" aria-label="Student actions">
-              <div class="flyout-heading">Students</div>
-              <NuxtLink :to="studentPage" class="flyout-item" @click="studentFlyoutOpen=false;mobileOpen=false">View Students</NuxtLink>
-              <button type="button" class="flyout-item" @click="openStudentAdd">Add Student</button>
+            <div v-if="openFlyout===item.label" class="student-flyout" :style="{'--flyout-top':flyoutTop+'px'}" :aria-label="item.label+' actions'">
+              <div class="flyout-heading">{{item.label}}</div>
+              <button v-for="option in submenuItems[item.label as keyof typeof submenuItems]" :key="option.action" type="button" class="flyout-item" @click="chooseFlyout(item,option.action)">{{option.label}}</button>
             </div>
           </div>
-          <NuxtLink v-else :to="item.to" class="item" :class="{'current':selected(item.to)}" @click="mobileOpen=false;studentFlyoutOpen=false"><span>{{item.icon}}</span>{{item.label}}</NuxtLink>
+          <NuxtLink v-else :to="item.to" class="item" :class="{'current':selected(item.to)}" @click="mobileOpen=false;openFlyout=null"><span>{{item.icon}}</span>{{item.label}}</NuxtLink>
         </template>
       </nav>
       <button class="logout" type="button" @click="signOut">Sign Out</button>
@@ -130,7 +142,7 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
 .role{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#9eb6d5;padding:20px 18px 10px}
 .school-select{padding:0 14px 12px;color:#c7d9ef;font-size:12px}.school-select select{display:block;width:100%;margin-top:5px;background:#102b4c;color:white;border:1px solid #4b729b;border-radius:6px;padding:8px}
 .nav{display:flex;flex-direction:column;gap:4px;padding:0 10px;overflow-y:auto;flex:1}.item{display:flex;align-items:center;gap:12px;padding:11px 12px;color:#d4e4f9;text-decoration:none;border-radius:8px;font-size:14px}.item span{min-width:22px;text-align:center}.item:hover{background:#173a66}.current{background:#175da5;color:white;font-weight:700}
-.student-menu-anchor{position:relative}.student-menu-trigger{width:100%;background:transparent;border:0;text-align:left;font-family:inherit;cursor:pointer}.menu-chevron{margin-left:auto!important;min-width:12px!important}.student-flyout{position:fixed;top:146px;left:260px;width:224px;background:#102b4c;border:1px solid #355c84;border-radius:0 12px 12px 0;box-shadow:0 14px 35px #0008;padding:12px;z-index:70}.flyout-heading{color:#a9c9ed;font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin:4px 8px 10px}.flyout-item{display:block;width:100%;padding:12px 10px;border:0;border-radius:7px;text-align:left;background:transparent;color:white;font:inherit;font-size:14px;text-decoration:none;cursor:pointer}.flyout-item:hover,.flyout-item:focus-visible{background:#175da5}.logout{margin:12px;padding:12px;background:#142f52;color:white;border:1px solid #355679;border-radius:8px;cursor:pointer}
+.student-menu-anchor{position:relative}.student-menu-trigger{width:100%;background:transparent;border:0;text-align:left;font-family:inherit;cursor:pointer}.menu-chevron{margin-left:auto!important;min-width:12px!important}.student-flyout{position:fixed;top:var(--flyout-top);left:260px;width:224px;background:#102b4c;border:1px solid #355c84;border-radius:0 12px 12px 0;box-shadow:0 14px 35px #0008;padding:12px;z-index:70}.flyout-heading{color:#a9c9ed;font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin:4px 8px 10px}.flyout-item{display:block;width:100%;padding:12px 10px;border:0;border-radius:7px;text-align:left;background:transparent;color:white;font:inherit;font-size:14px;text-decoration:none;cursor:pointer}.flyout-item:hover,.flyout-item:focus-visible{background:#175da5}.logout{margin:12px;padding:12px;background:#142f52;color:white;border:1px solid #355679;border-radius:8px;cursor:pointer}
 .content{flex:1;min-width:0}.top{min-height:70px;display:flex;align-items:center;gap:14px;padding:0 26px;background:#0a1e38;border-bottom:1px solid #25486e}.page{padding:24px 28px;max-width:100%;overflow-x:auto}
 .toggle{display:block;background:none;border:0;color:white;font-size:26px;cursor:pointer}.shade{display:none}
 @media(min-width:801px){.side.collapsed .student-flyout{display:none}.side.collapsed{width:0;min-width:0;overflow:hidden;border-right:0}.content{min-width:0}}

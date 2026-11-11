@@ -8,6 +8,16 @@ const competitions = ref<any[]>([]), events = ref<any[]>([]), definitions = ref<
 const students = ref<any[]>([]), enrolments = ref<any[]>([]), houses = ref<any[]>([])
 const entries = ref<any[]>([]), participants = ref<any[]>([])
 const competitionId = ref(''), eventId = ref(''), studentId = ref(''), search = ref('')
+
+const actionModal = ref(false)
+const actionKind = ref('')
+function dismissAction(){
+  actionModal.value=false
+  if(typeof route.query.action==='string')navigateTo({path:route.path,query:{...route.query,action:undefined},replace:true})
+}
+watch(()=>route.query.action,(action)=>{
+  if(typeof action==='string' && action==='add'){actionKind.value=action;actionModal.value=true}
+},{immediate:true})
 const competition = computed(() => competitions.value.find(c => c.id === competitionId.value))
 const event = computed(() => events.value.find(e => e.id === eventId.value))
 const selectedEvents = computed(() => events.value.filter(e => e.competition_id === competitionId.value))
@@ -73,7 +83,7 @@ async function register(){
  try{
   const r=await db.rpc('school_register_student_event',{p_school:schoolId.value,p_event:eventId.value,p_student:studentId.value})
   if(r.error)throw r.error
-  notice.value='Student registered successfully.';studentId.value='';await loadEntries()
+  notice.value='Student registered successfully.';studentId.value='';dismissAction();await loadEntries()
  }catch(e:any){error.value=e.message||'Unable to register student.'}finally{saving.value=false}
 }
 async function removeEntry(id:string){
@@ -104,11 +114,11 @@ onMounted(load)
     <h2>{{eventName(event.event_definition_id)}} — Entries ({{selectedEntries.length}})</h2>
     <p v-if="event.is_team" class="notice">Team and relay registration will be added in a later phase.</p>
     <p v-else-if="competition?.status!=='registration'" class="notice">Registration is closed. A School Administrator can change the competition status to Registration in Sports &amp; Events.</p>
-    <form v-if="canEdit && !event.is_team && competition?.status==='registration'" class="form-grid" @submit.prevent="register">
+    <AdminActionModal :open="actionModal && canEdit && !!event && !event.is_team && competition?.status==='registration'" title="Assign Student to Event" @close="dismissAction"><form class="form-grid" @submit.prevent="register">
      <label class="field"><span>Find student</span><input v-model="search" placeholder="Search by name or student number" /></label>
      <label class="field"><span>Student (enrolled for {{competition?.school_year}})</span><select v-model="studentId" required><option value="">Select student</option><option v-for="s in eligibleStudents" :key="s.id" :value="s.id">{{studentName(s.id)}} · {{houseName(enrolments.find(e=>e.student_id===s.id)?.house_id)}}</option></select></label>
      <button class="btn primary" type="submit" :disabled="saving || !studentId">{{saving?'Registering…':'Register Student'}}</button>
-    </form>
+    </form></AdminActionModal>
     <p v-if="!selectedEntries.length">No registrations yet.</p>
     <div v-for="entry in selectedEntries" :key="entry.id" class="data-row" style="display:flex;justify-content:space-between;align-items:center;gap:1rem">
      <div><strong>{{studentName(entry.student_id)}}</strong><div><small>{{houseName(entry.house_id)}}</small></div></div>

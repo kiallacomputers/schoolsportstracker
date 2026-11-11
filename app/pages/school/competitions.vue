@@ -10,6 +10,16 @@ const blank = () => ({ name:'', sport_id:'', school_year:new Date().getFullYear(
 const form = ref(blank())
 const editForm = ref({name:'',starts_on:'',status:'draft'})
 const eventForm = ref({event_definition_id:'',age_group:'',division:'',is_team:false})
+
+const actionModal = ref(false)
+const actionKind = ref('')
+function dismissAction(){
+  actionModal.value=false
+  if(typeof route.query.action==='string')navigateTo({path:route.path,query:{...route.query,action:undefined},replace:true})
+}
+watch(()=>route.query.action,(action)=>{
+  if(typeof action==='string' && ['add','event'].includes(action)){actionKind.value=action;actionModal.value=true}
+},{immediate:true})
 const selectedCompetition = computed(() => competitions.value.find(c => c.id === selected.value))
 const eligibleDefinitions = computed(() => definitions.value.filter(d => d.sport_id === selectedCompetition.value?.sport_id))
 const selectedEvents = computed(() => events.value.filter(e => e.competition_id === selected.value))
@@ -60,7 +70,7 @@ watch(selected,async()=>{
 async function perform(work:()=>Promise<any>,success:string) {
   if(saving.value)return
   saving.value=true;error.value='';notice.value=''
-  try {const result=await work();if(result?.error)throw result.error;notice.value=success;await load()}
+  try {const result=await work();if(result?.error)throw result.error;notice.value=success;dismissAction();await load()}
   catch(e:any){error.value=e.message||'Unable to save'}finally{saving.value=false}
 }
 function createCompetition(){
@@ -90,7 +100,7 @@ onMounted(load)
     <p v-if="error" class="error" role="alert">{{error}}</p>
     <p v-if="notice" class="notice" role="status">{{notice}}</p>
     <template v-if="!loading && !error">
-      <div v-if="canEdit" class="card" style="margin-bottom:1rem">
+      <AdminActionModal :open="actionModal && actionKind==='add' && canEdit" title="Add Competition" @close="dismissAction"><div>
         <h2>Create School Competition</h2>
         <form class="form-grid" @submit.prevent="createCompetition">
           <label class="field"><span>Competition name</span><input v-model="form.name" required minlength="3" maxlength="120" placeholder="e.g. 2027 House Athletics" /></label>
@@ -99,7 +109,7 @@ onMounted(load)
           <label class="field"><span>Competition date (optional)</span><input v-model="form.starts_on" type="date" /></label>
           <button class="btn primary" type="submit" :disabled="saving">{{saving?'Saving…':'Create Competition'}}</button>
         </form>
-      </div>
+      </div></AdminActionModal>
       <div class="card" style="margin-bottom:1rem">
         <h2>Competitions ({{competitions.length}})</h2>
         <p v-if="!competitions.length">No competitions associated with this school yet.</p>
@@ -124,7 +134,7 @@ onMounted(load)
             <button v-if="canEdit && selectedCompetition.organiser_school_id===schoolId && selectedCompetition.competition_type==='intra_school'" class="btn" type="button" :disabled="saving" @click="removeEvent(ev.id)">Remove</button>
           </div>
           <p v-if="!selectedEvents.length">No events configured yet.</p>
-          <form v-if="canEdit && selectedCompetition.organiser_school_id===schoolId && selectedCompetition.competition_type==='intra_school'" class="form-grid" style="margin-top:1rem" @submit.prevent="addEvent">
+          <AdminActionModal :open="actionModal && actionKind==='event' && canEdit && selectedCompetition.organiser_school_id===schoolId && selectedCompetition.competition_type==='intra_school'" title="Add Event" @close="dismissAction"><form class="form-grid" @submit.prevent="addEvent">
             <h3>Add Event</h3>
             <p v-if="!eligibleDefinitions.length">No event definitions exist for this sport. A platform administrator must add them to the event catalogue.</p>
             <label class="field"><span>Event</span><select v-model="eventForm.event_definition_id" required><option value="" disabled>Select event</option><option v-for="d in eligibleDefinitions" :key="d.id" :value="d.id">{{d.name}} ({{d.measurement}})</option></select></label>
@@ -132,7 +142,7 @@ onMounted(load)
             <label class="field"><span>Division (optional)</span><input v-model="eventForm.division" maxlength="60" placeholder="e.g. Girls" /></label>
             <label><input v-model="eventForm.is_team" type="checkbox" /> Team event</label>
             <button class="btn primary" type="submit" :disabled="saving || !eligibleDefinitions.length">Add Event</button>
-          </form>
+          </form></AdminActionModal>
         </div>
       </template>
     </template>

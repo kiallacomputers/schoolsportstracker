@@ -4,6 +4,19 @@ const schoolId=computed(()=>typeof route.query.school==='string'?route.query.sch
 const loading=ref(true),saving=ref(false),error=ref(''),notice=ref(''),canEdit=ref(false)
 const competitions=ref<any[]>([]),events=ref<any[]>([]),definitions=ref<any[]>([]),results=ref<any[]>([]),standings=ref<any[]>([])
 const competitionId=ref(''),eventId=ref(''),roundId=ref('')
+
+const actionModal = ref(false)
+const actionKind = ref('')
+function dismissAction(){
+  editingResult.value=null
+  actionModal.value=false
+  if(typeof route.query.action==='string')navigateTo({path:route.path,query:{...route.query,action:undefined},replace:true})
+}
+watch(()=>route.query.action,(action)=>{
+  if(typeof action==='string' && action==='add'){actionKind.value=action;actionModal.value=true}
+},{immediate:true})
+const editingResult = ref<any | null>(null)
+function editResult(r:any){editingResult.value=r;actionKind.value='add';actionModal.value=true}
 const competition=computed(()=>competitions.value.find(x=>x.id===competitionId.value))
 const event=computed(()=>events.value.find(x=>x.id===eventId.value))
 const eventLabel=(e:any)=>definitions.value.find(x=>x.id===e.event_definition_id)?.name||'Event'
@@ -34,7 +47,7 @@ async function save(r:any){if(!canEdit.value||saving.value)return;const v=edits.
  if(v.status==='valid'&&(perf===null||!Number.isSafeInteger(perf)||perf<0))throw new Error('Enter a valid non-negative whole-number performance.')
  if(place!==null&&(!Number.isSafeInteger(place)||place<1))throw new Error('Placing must be a positive whole number.')
  const x=await db.rpc('school_save_event_result',{p_school:schoolId.value,p_round:rd,p_entry:r.entry_id,p_status:v.status,p_performance:perf,p_placing:place,p_publish:v.publish});if(x.error)throw x.error
- notice.value=`Saved result for ${r.student_name}.`;await Promise.all([fetchResults(),fetchStandings()])
+ notice.value=`Saved result for ${r.student_name}.`;dismissAction();editingResult.value=null;await Promise.all([fetchResults(),fetchStandings()])
  }catch(e:any){error.value=e.message||'Unable to save result.'}finally{saving.value=false}}
 onMounted(load)
 </script>
@@ -58,16 +71,28 @@ onMounted(load)
     <p v-if="!results.length">No registered students for this event.</p>
     <div v-for="r in results" :key="r.entry_id" class="data-row" style="margin-bottom:1rem">
      <strong>{{r.student_name}}</strong> <small>— {{r.house_name}}</small>
-     <div v-if="edits[r.entry_id]" class="form-grid" style="margin-top:.5rem">
-      <label class="field"><span>Status</span><select v-model="edits[r.entry_id]!.status"><option value="valid">Valid</option><option value="dns">Did not start</option><option value="dnf">Did not finish</option><option value="dq">Disqualified</option></select></label>
-      <label v-if="edits[r.entry_id]!.status==='valid'" class="field"><span>{{formatPerformance(r)}}</span><input v-model="edits[r.entry_id]!.performance" type="number" min="0" step="1" /></label>
-      <label v-if="edits[r.entry_id]!.status==='valid'" class="field"><span>Placing</span><input v-model="edits[r.entry_id]!.placing" type="number" min="1" step="1" /></label>
-      <label class="field"><span>Publication</span><select v-model="edits[r.entry_id]!.publish"><option :value="false">Draft / Unpublished</option><option :value="true">Published</option></select></label>
-      <button v-if="canEdit&&['active','completed'].includes(competition?.status)" class="btn primary" type="button" :disabled="saving" @click="save(r)">{{saving?'Saving…':'Save Result'}}</button>
-     </div>
+     <button v-if="canEdit&&['active','completed'].includes(competition?.status)" class="btn" type="button" @click="editResult(r)">Enter / Edit Result</button>
      <small v-if="r.result_status">Current: {{r.result_status}} · Place {{r.placing_position??'—'}} · {{r.points??0}} points · {{r.published?'Published':'Draft'}}</small>
     </div>
    </div>
   </template>
+  <AdminActionModal :open="actionModal && canEdit && !editingResult" title="Select Student Result" @close="dismissAction">
+    <p>Select a registered student to enter or edit their result.</p>
+    <p v-if="!['active','completed'].includes(competition?.status)">The competition must be Active or Completed before results can be entered.</p>
+    <div v-for="r in results" :key="r.entry_id" class="data-row">
+      <button type="button" class="btn" :disabled="!['active','completed'].includes(competition?.status)" @click="editResult(r)">{{r.student_name}} — {{r.house_name}}</button>
+    </div>
+    <p v-if="!results.length">Select an event with registered students first.</p>
+  </AdminActionModal>
+  <AdminActionModal :open="actionModal && canEdit && !!editingResult" :title="editingResult ? 'Result — '+editingResult.student_name : 'Enter Result'" @close="dismissAction">
+    <div v-if="editingResult && edits[editingResult.entry_id]" class="form-grid">
+
+      <label class="field"><span>Status</span><select v-model="edits[editingResult.entry_id]!.status"><option value="valid">Valid</option><option value="dns">Did not start</option><option value="dnf">Did not finish</option><option value="dq">Disqualified</option></select></label>
+      <label v-if="edits[editingResult.entry_id]!.status==='valid'" class="field"><span>{{formatPerformance(editingResult)}}</span><input v-model="edits[editingResult.entry_id]!.performance" type="number" min="0" step="1" /></label>
+      <label v-if="edits[editingResult.entry_id]!.status==='valid'" class="field"><span>Placing</span><input v-model="edits[editingResult.entry_id]!.placing" type="number" min="1" step="1" /></label>
+      <label class="field"><span>Publication</span><select v-model="edits[editingResult.entry_id]!.publish"><option :value="false">Draft / Unpublished</option><option :value="true">Published</option></select></label>
+      <button v-if="canEdit&&['active','completed'].includes(competition?.status)" class="btn primary" type="button" :disabled="saving" @click="save(editingResult)">{{saving?'Saving…':'Save Result'}}</button>
+    </div>
+  </AdminActionModal>
  </div></div>
 </template>
