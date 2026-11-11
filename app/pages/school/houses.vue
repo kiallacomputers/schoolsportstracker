@@ -7,6 +7,7 @@ const rows = ref<any[]>([])
 const schoolId = ref('')
 const schoolName = ref('')
 const role = ref('')
+const canManage = computed(() => role.value === 'school_admin' || role.value === 'super_admin')
 const name = ref('')
 const colour = ref('#2563eb')
 const saving = ref(false)
@@ -56,7 +57,7 @@ function hexToHsv(hex: string) {
 }
 
 function editHouse(house: any) {
-  if (role.value !== 'school_admin') return
+  if (!canManage.value) return
   actionKind.value='edit';actionModal.value=true
   editingId.value = house.id
   name.value = house.name
@@ -119,13 +120,36 @@ async function load() {
   if (membershipError) { error.value = membershipError.message; busy.value = false; return }
   const eligible = (memberships || []).filter(x => ['school_admin', 'teacher'].includes(x.role))
   const requested = typeof route.query.school === 'string' ? route.query.school : ''
+  const { data: isPlatformAdmin, error: platformError } = await db.rpc('is_platform_admin')
+  if (platformError) { error.value = platformError.message; busy.value = false; return }
   const membership = eligible.find(x => x.school_id === requested) || (!requested ? eligible[0] : null)
-  if (!membership) { error.value = 'You do not have access to this school.'; busy.value = false; return }
-  schoolId.value = membership.school_id
-  role.value = membership.role
-  schoolName.value = (membership.schools as any)?.name || 'School'
+  if (!membership && !isPlatformAdmin) {
+    error.value = 'You do not have access to this school.'; busy.value = false; return
+  }
+  if (isPlatformAdmin) {
+    if (!requested) {
+      error.value = 'Select a school from the SuperAdmin school selector before managing houses.'
+      busy.value = false
+      return
+    }
+    const schoolResult = await db.from('schools').select('id,name').eq('id', requested).maybeSingle()
+    if (schoolResult.error || !schoolResult.data) {
+      error.value = schoolResult.error?.message || 'Selected school was not found.'
+      busy.value = false
+      return
+    }
+    schoolId.value = schoolResult.data.id
+    schoolName.value = schoolResult.data.name || 'School'
+    role.value = 'super_admin'
+  } else {
+    if (!membership) { error.value = 'You do not have access to this school.'; busy.value = false; return }
+    schoolId.value = membership.school_id
+    role.value = membership.role
+    schoolName.value = (membership.schools as any)?.name || 'School'
+  }
   await refresh()
   busy.value = false
+  if (route.query.action === 'add' && canManage.value) { editingId.value = null; actionKind.value = 'add'; actionModal.value = true }
 }
 
 async function refresh() {
@@ -136,7 +160,7 @@ async function refresh() {
 }
 
 async function add() {
-  if (role.value !== 'school_admin' || !name.value.trim()) return
+  if (!canManage.value || !name.value.trim()) return
   saving.value = true
   error.value = ''; notice.value = ''
   const result = editingId.value
@@ -156,7 +180,7 @@ async function add() {
 }
 
 async function deleteHouse(house: any) {
-  if (role.value !== 'school_admin' || deletingId.value) return
+  if (!canManage.value || deletingId.value) return
   if (!window.confirm(`Permanently delete the house "${house.name}"? This cannot be undone and may be blocked if students or results are linked to it.`)) return
   deletingId.value = house.id
   error.value = ''; notice.value = ''
@@ -170,6 +194,16 @@ async function deleteHouse(house: any) {
   await refresh()
 }
 
+watch(() => route.query.school, async (next, previous) => {
+  if (next === previous) return
+  actionModal.value = false
+  editingId.value = null
+  name.value = ''
+  rows.value = []
+  schoolId.value = ''
+  busy.value = true
+  await load()
+})
 onMounted(load)
 </script>
 
@@ -182,7 +216,7 @@ onMounted(load)
       <p v-if="error" class="error" role="alert">{{ error }}</p>
       <p v-if="notice" role="status">{{ notice }}</p>
       <template v-if="!busy && schoolId">
-        <AdminActionModal :open="actionModal && role === 'school_admin'" :title="editingId ? 'Edit House' : 'Add House'" @close="dismissAction"><form id="house-editor" class="card house-editor" @submit.prevent="add">
+        <AdminActionModal :open="actionModal && canManage" :title="editingId ? 'Edit House' : 'Add House'" @close="dismissAction"><form id="house-editor" class="card house-editor" @submit.prevent="add">
           <h2>{{ editingId ? 'Edit House' : 'Add House' }}</h2>
           <label class="house-name">House name
             <input v-model="name" required maxlength="120" placeholder="e.g. Patrick" />
@@ -225,7 +259,7 @@ onMounted(load)
             <span>{{ house.name }}</span>
             <div class="house-actions">
               <span class="house-colour" :style="{ backgroundColor: validColour(house.colour) }" :aria-label="`${house.name} house colour`" :title="validColour(house.colour)" role="img"></span>
-              <template v-if="role === 'school_admin'">
+              <template v-if="canManage">
                 <button type="button" class="action-btn" :disabled="saving || !!deletingId" :aria-label="`Edit ${house.name}`" @click="editHouse(house)">Edit</button>
                 <button type="button" class="action-btn delete-btn" :disabled="saving || !!deletingId" :aria-label="`Delete ${house.name}`" @click="deleteHouse(house)">{{ deletingId === house.id ? 'Deleting…' : 'Delete' }}</button>
               </template>
