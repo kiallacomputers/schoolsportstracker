@@ -41,7 +41,49 @@ watch(()=>route.query.action,(action)=>{
   if(typeof action==='string' && ['invite','assign'].includes(action)){actionKind.value=action;actionModal.value=true}
 },{immediate:true})
 
-async function load(){error.value='';const {data:{user}}=await db.auth.getUser();if(!user){await navigateTo('/login');return}const {data:mine,error:me}=await db.from('school_memberships').select('school_id,role,schools(name)').eq('user_id',user.id);if(me){error.value=me.message;return}const wanted=typeof route.query.school==='string'?route.query.school:'';const m=(mine||[]).find(x=>x.school_id===wanted&&['school_admin','teacher'].includes(x.role));if(!m){error.value='You do not have access to this school.';return}schoolId.value=wanted;schoolName.value=(m.schools as any)?.name||'School';isAdmin.value=m.role==='school_admin';const result=await db.rpc('school_member_directory',{p_school_id:wanted});if(result.error){error.value=result.error.message;return}members.value=result.data||[];if(isAdmin.value){const r=await db.from('school_staff_requests').select('id,user_id,email,given_name,family_name,status,created_at').eq('school_id',wanted).order('created_at',{ascending:false}).limit(500);if(r.error){error.value=r.error.message;return}requests.value=r.data||[]}}
+async function load(){
+  error.value=''; schoolId.value=''; schoolName.value=''; isAdmin.value=false
+  const {data:{user},error:authError}=await db.auth.getUser()
+  if(authError || !user){await navigateTo('/login');return}
+  // Check platform role independently: SuperAdmins do not need school_memberships rows.
+  const platform=await db.rpc('is_platform_admin')
+  if(platform.error){error.value=platform.error.message;return}
+  const isPlatformAdmin=platform.data===true
+  const {data:mine,error:me}=await db.from('school_memberships').select('school_id,role,schools(name)').eq('user_id',user.id)
+  if(me){error.value=me.message;return}
+  let wanted=typeof route.query.school==='string'?route.query.school:''
+  // If a flyout or bookmark omitted the school, recover a valid school context.
+  // Never use an arbitrary school for a non-platform administrator.
+  if(!wanted){
+    if(isPlatformAdmin){
+      const {data:schools,error:schoolsError}=await db.from('schools').select('id').order('name').limit(1)
+      if(schoolsError){error.value=schoolsError.message;return}
+      wanted=schools?.[0]?.id||''
+    }else{
+      wanted=(mine||[]).find((m:any)=>['school_admin','teacher'].includes(m.role))?.school_id||''
+    }
+    if(wanted){await navigateTo({path:route.path,query:{...route.query,school:wanted},replace:true});return}
+  }
+  const membership=(mine||[]).find((m:any)=>m.school_id===wanted&&['school_admin','teacher'].includes(m.role))
+  if(!wanted || (!isPlatformAdmin && !membership)){
+    error.value='You do not have access to this school.';return
+  }
+  const {data:school,error:schoolError}=await db.from('schools').select('name').eq('id',wanted).single()
+  if(schoolError){error.value=schoolError.message;return}
+  schoolId.value=wanted
+  schoolName.value=school.name
+  isAdmin.value=isPlatformAdmin || membership?.role==='school_admin'
+  const result=await db.rpc('school_member_directory',{p_school_id:wanted})
+  if(result.error){error.value=result.error.message;return}
+  members.value=result.data||[]
+  if(isAdmin.value){
+    const r=await db.from('school_staff_requests').select('id,user_id,email,given_name,family_name,status,created_at').eq('school_id',wanted).order('created_at',{ascending:false}).limit(500)
+    if(r.error){error.value=r.error.message;return}
+    requests.value=r.data||[]
+  }else{requests.value=[]}
+}
+
+watch(()=>route.query.school,async()=>{busy.value=true;try{await load()}finally{busy.value=false}})
 onMounted(async()=>{try{await load()}finally{busy.value=false}})
 async function review(id:string,approve:boolean){if(!confirm(`${approve?'Approve':'Reject'} this staff request?`))return;saving.value=true;error.value='';notice.value='';try{const {error:e}=await db.rpc('review_staff_request',{p_request_id:id,p_approve:approve});if(e)throw e;notice.value=approve?'Staff member approved.':'Request rejected.';await load()}catch(e:any){error.value=e.message}finally{saving.value=false}}
 async function revoke(userId:string){if(!confirm('Remove this teacher’s access to this school?'))return;saving.value=true;error.value='';notice.value='';try{const {error:e}=await db.rpc('revoke_school_staff',{p_school_id:schoolId.value,p_user_id:userId});if(e)throw e;notice.value='Teacher access removed.';await load()}catch(e:any){error.value=e.message}finally{saving.value=false}}
