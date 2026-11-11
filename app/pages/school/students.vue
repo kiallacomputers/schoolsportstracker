@@ -9,22 +9,36 @@ const year = ref(new Date().getFullYear()), search = ref('')
 const blank = () => ({id:'',student_number:'',given_name:'',family_name:'',date_of_birth:'',year_level:'',house_id:''})
 const form = ref(blank()), editing = ref(false)
 const modalOpen = ref(false)
+const importModalOpen = ref(false)
+const importError = ref('')
 const confirmSave = ref(false)
 const modalError = ref('')
 function startAdd() { form.value = blank(); editing.value = false; modalError.value = ''; confirmSave.value = false; modalOpen.value = true }
 function closeModal() { if (saving.value) return; modalOpen.value = false; confirmSave.value = false; modalError.value = ''; reset(); clearAddAction() }
 function clearAddAction() {
-  if (route.query.action !== 'add') return
+  if (!['add','import'].includes(String(route.query.action || ''))) return
   const query = { ...route.query }
   delete query.action
   navigateTo({ path: route.path, query, replace: true })
+}
+function closeImportModal() {
+  if (importing.value) return
+  importModalOpen.value = false
+  csvPreview.value = []
+  importReport.value = ''
+  importError.value = ''
+  clearAddAction()
+}
+function openImportFromMenu() {
+  if (route.query.action !== 'import' || busy.value || !canEdit.value) return
+  importModalOpen.value = true
 }
 function openAddFromMenu() {
   if (route.query.action !== 'add' || busy.value || !canEdit.value) return
   if (!modalOpen.value) startAdd()
 }
-watch(() => route.query.action, (action) => { if (action === 'add') openAddFromMenu() })
-watch([busy, canEdit], () => openAddFromMenu())
+watch(() => route.query.action, (action) => { if (action === 'add') openAddFromMenu(); if (action === 'import') openImportFromMenu() })
+watch([busy, canEdit], () => { openAddFromMenu(); openImportFromMenu() })
 function requestSave() {
   modalError.value = ''
   if (!form.value.student_number.trim() || !form.value.given_name.trim() || !form.value.family_name.trim()) { modalError.value = 'Student number, first name and last name are required.'; return }
@@ -56,7 +70,7 @@ async function load() {
     if (failure) throw failure
     rows.value = s.data || []; houses.value = h.data || []; enrolments.value = e.data || []
   } catch (e:any) { error.value = e.message || 'Unable to load students.' }
-  finally { busy.value = false; nextTick(() => openAddFromMenu()) }
+  finally { busy.value = false; nextTick(() => { openAddFromMenu(); openImportFromMenu() }) }
 }
 onMounted(load)
 watch([schoolId,year],load)
@@ -122,21 +136,21 @@ function parseCsv(input:string):string[][] {
   return result
 }
 async function readCsv(ev:Event) {
-  csvPreview.value = []; importReport.value = ''; error.value = ''
+  csvPreview.value = []; importReport.value = ''; importError.value = ''
   const file = (ev.target as HTMLInputElement).files?.[0]
   if(!file) return
-  if(file.size > 1024*1024){error.value='CSV must be smaller than 1 MB.';return}
+  if(file.size > 1024*1024){importError.value='CSV must be smaller than 1 MB.';return}
   try {
     const data=parseCsv((await file.text()).replace(/^\uFEFF/,''))
     const headers=(data.shift()||[]).map(x=>x.trim().toLowerCase().replace(/\s+/g,'_'))
     for(const required of ['student_number','given_name','family_name']) if(!headers.includes(required)) throw new Error(`Missing CSV column: ${required}`)
     if(data.length>500)throw new Error('Import a maximum of 500 students at a time.')
     csvPreview.value=data.map((r,i)=>{const item:any={line:i+2};headers.forEach((h,j)=>item[h]=(r[j]||'').trim());return item})
-  } catch(e:any){error.value=e.message}
+  } catch(e:any){importError.value=e.message}
 }
 async function importCsv() {
   if(!canEdit.value || importing.value || !csvPreview.value.length)return
-  importing.value=true;error.value='';let ok=0;const failures:string[]=[]
+  importing.value=true;importError.value='';let ok=0;const failures:string[]=[]
   for(const r of csvPreview.value) {
     try {
       if(!r.student_number || !r.given_name || !r.family_name)throw new Error('Missing required field')
@@ -173,7 +187,18 @@ async function importCsv() {
       <div v-else style="display:flex;gap:.75rem;margin-top:1rem;flex-wrap:wrap"><button class="btn" type="button" :disabled="saving" @click="requestSave">{{editing?'Save Changes':'Add Student'}}</button><button class="btn" type="button" :disabled="saving" @click="closeModal">Cancel</button></div>
     </section>
   </div>
-  <section v-if="canEdit" class="card" style="margin-bottom:1rem"><h2>Import Students from CSV</h2><p>Columns: student_number, given_name, family_name, date_of_birth, year_level, house. Date format YYYY-MM-DD. Existing student numbers are updated. Maximum 500 rows.</p><input type="file" accept=".csv,text/csv" @change="readCsv" /><p v-if="csvPreview.length">{{csvPreview.length}} rows ready to import into {{year}}.</p><button v-if="csvPreview.length" class="btn" :disabled="importing" @click="importCsv">{{importing?'Importing…':'Import Students'}}</button><p v-if="importReport" role="status">{{importReport}}</p></section>
+  <div v-if="canEdit && importModalOpen" class="student-modal-backdrop" @click.self="closeImportModal">
+    <section class="student-modal card" role="dialog" aria-modal="true" aria-labelledby="student-import-title">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem"><h2 id="student-import-title">Import Students from CSV</h2><button type="button" class="btn" :disabled="importing" aria-label="Close import" @click="closeImportModal">✕</button></div>
+      <p>Columns: student_number, given_name, family_name, date_of_birth, year_level, house. Date format YYYY-MM-DD. Existing student numbers are updated. Maximum 500 rows.</p>
+      <p>School year: {{year}}</p>
+      <label class="field">Select CSV file<input type="file" accept=".csv,text/csv" :disabled="importing" @change="readCsv" /></label>
+      <p v-if="importError" class="error" role="alert">{{importError}}</p>
+      <p v-if="csvPreview.length">{{csvPreview.length}} rows ready to import into {{year}}.</p>
+      <p v-if="importReport" role="status">{{importReport}}</p>
+      <div style="display:flex;gap:.75rem;margin-top:1rem;flex-wrap:wrap"><button v-if="csvPreview.length" type="button" class="btn" :disabled="importing" @click="importCsv">{{importing?'Importing…':'Import Students'}}</button><button type="button" class="btn" :disabled="importing" @click="closeImportModal">Close</button></div>
+    </section>
+  </div>
   <section class="card"><h2>Students ({{display.length}})</h2><label class="field">Show students<select v-model="statusFilter"><option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All students</option></select></label><input v-model="search" placeholder="Search by name or student number" aria-label="Search students" /><p v-if="busy">Loading…</p><div v-for="s in display" :key="s.id" class="data-row" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap"><div><strong>{{s.family_name}}, {{s.given_name}}</strong><small style="display:block">{{s.is_active === false ? 'Inactive · ' : ''}}{{s.student_number}} · Year {{enrolmentFor(s.id)?.year_level||'—'}} · {{houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name||'No house'}}</small></div><div v-if="canEdit" style="display:flex;gap:.5rem"><button class="btn" @click="startEdit(s)">Edit</button><button class="btn" :disabled="saving" @click="setStudentActive(s, s.is_active === false)">{{s.is_active === false ? 'Reactivate' : 'Disable'}}</button><button v-if="isSuperAdmin" class="btn" :disabled="saving" @click="remove(s)">Delete Permanently</button></div></div><p v-if="!busy&&!display.length">No students found.</p></section>
 </div></div>
 </template>
