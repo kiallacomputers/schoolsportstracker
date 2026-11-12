@@ -25,6 +25,18 @@ watch(()=>route.query.action,(action)=>{
 const selectedCompetition = computed(() => competitions.value.find(c => c.id === selected.value))
 const eligibleDefinitions = computed(() => definitions.value.filter(d => d.sport_id === selectedCompetition.value?.sport_id))
 const selectedEvents = computed(() => events.value.filter(e => e.competition_id === selected.value))
+const registrationReadiness = computed(() => {
+  const c = selectedCompetition.value
+  if (!c) return { label: 'No competition selected', items: [] as string[] }
+  const items: string[] = []
+  if (!selectedEvents.value.length) items.push('Add at least one event')
+  if (!c.registration_opens_at || !c.registration_closes_at) items.push('Set both registration opening and closing dates')
+  if (c.status !== 'registration') items.push('Change competition status to Registration when ready')
+  if (c.registration_closes_at && new Date(c.registration_closes_at).getTime() <= Date.now()) items.push('Registration closing date has passed')
+  if (c.registration_opens_at && c.registration_closes_at && new Date(c.registration_opens_at).getTime() > new Date(c.registration_closes_at).getTime()) items.push('Correct registration dates')
+  return { label: items.length ? 'Setup incomplete' : 'Configuration ready', items }
+})
+
 const canEditSelected = computed(() => canEdit.value && selectedCompetition.value?.organiser_school_id === schoolId.value && selectedCompetition.value?.competition_type === 'intra_school')
 const windowValid = computed(() => !windowForm.value.opens || !windowForm.value.closes || windowForm.value.opens <= windowForm.value.closes)
 const definitionName = (id:string) => definitions.value.find(d => d.id === id)?.name || 'Event'
@@ -168,6 +180,15 @@ onMounted(load)
             <button class="btn primary" type="submit" :disabled="windowSaving || !windowValid">{{windowSaving?'Saving…':'Save Registration Dates'}}</button>
           </form>
           <p v-else>{{selectedCompetition.registration_opens_at ? new Date(selectedCompetition.registration_opens_at).toLocaleString() : 'No opening date'}} — {{selectedCompetition.registration_closes_at ? new Date(selectedCompetition.registration_closes_at).toLocaleString() : 'No closing date'}}</p>
+        </div>
+        <div class="card" style="margin-bottom:1rem">
+          <h2>Competition Setup Checklist</h2>
+          <p><strong>{{ registrationReadiness.label }}</strong></p>
+          <ul v-if="registrationReadiness.items.length">
+            <li v-for="item in registrationReadiness.items" :key="item">{{ item }}</li>
+          </ul>
+          <p v-else>Event definitions, registration dates and competition status are configured.</p>
+          <p class="notice">This checklist checks configuration only. Student self-registration and server-side registration enforcement will be built in Phase 4D.</p>
         </div>
         <div class="card">
           <h2>Events ({{selectedEvents.length}})</h2>
