@@ -19,6 +19,6 @@ export default defineEventHandler(async event=>{
  if(!issued.ok){const info=await issued.json().catch(()=>({}));throw createError({statusCode:403,statusMessage:info.message||'Not authorised to invite staff'})}
  const inviteToken=await issued.json() as string
  const link=`${origin}/staff/register?token=${encodeURIComponent(inviteToken)}`
- await sendGraphMail({to:email,subject:'School Sports Tracker — Staff invitation',text:`You have been invited to register as school staff on School Sports Tracker.\n\nRegister using this link:\n${link}\n\nUse the email address that received this invitation. Verify your email and submit the registration for School Administrator approval.\n\nThis link expires in seven days. If you were not expecting this invitation, ignore this email.`})
+ await sendGraphMail({to:email,subject:'School Sports Tracker — Staff invitation',text:`You have been invited to register as school staff on School Sports Tracker.\n\nRegister using this link:\n${link}\n\nUse the email address that received this invitation. Sign in with the invited email address to accept. Once accepted, you will be assigned to the school as a Teacher automatically.\n\nThis link expires in seven days. If you were not expecting this invitation, ignore this email.`})
  return {ok:true,message:'Microsoft Graph accepted the invitation for sending. Delivery is not guaranteed.'}
 })

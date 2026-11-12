@@ -2,7 +2,7 @@
 const db=useSupabaseClient(),route=useRoute()
 const busy=ref(true),saving=ref(false),error=ref(''),notice=ref(''),schoolName=ref(''),schoolId=ref(''),isAdmin=ref(false),isPlatformAdmin=ref(false),inviteEmail=ref('')
 const members=ref<any[]>([]),requests=ref<any[]>([])
-const staffSearch=ref(''),staffCandidates=ref<any[]>([]),selectedStaff=ref(''),searchingStaff=ref(false),staffSearchError=ref(''),assignRole=ref('teacher'),editingRoleUser=ref(''),editingRole=ref('teacher'),promotionRequests=ref<any[]>([])
+const staffSearch=ref(''),staffCandidates=ref<any[]>([]),selectedStaff=ref(''),searchingStaff=ref(false),staffSearchError=ref(''),assignRole=ref('teacher'),editingRoleUser=ref(''),editingRole=ref('teacher'),promotionRequests=ref<any[]>([]),invitations=ref<any[]>([])
 let searchSequence=0
 async function searchRegisteredStaff(){
   const seq=++searchSequence
@@ -82,11 +82,12 @@ async function load(){
   const result=await db.rpc('school_member_directory',{p_school_id:wanted})
   if(result.error){error.value=result.error.message;return}
   members.value=result.data||[]
+  requests.value=[]
   if(isAdmin.value){
-    const r=await db.from('school_staff_requests').select('id,user_id,email,given_name,family_name,status,created_at').eq('school_id',wanted).order('created_at',{ascending:false}).limit(500)
-    if(r.error){error.value=r.error.message;return}
-    requests.value=r.data||[]
-  }else{requests.value=[]}
+    const inv=await db.rpc('list_school_staff_invitations',{p_school_id:wanted})
+    if(inv.error){error.value=inv.error.message;return}
+    invitations.value=inv.data||[]
+  }else{invitations.value=[]}
   const pr=await db.rpc('list_school_admin_promotion_requests',{p_school_id:wanted})
   if(pr.error){error.value=pr.error.message;return}
   promotionRequests.value=pr.data||[]
@@ -94,7 +95,6 @@ async function load(){
 
 watch(()=>route.query.school,async()=>{busy.value=true;try{await load()}finally{busy.value=false}})
 onMounted(async()=>{try{await load()}finally{busy.value=false}})
-async function review(id:string,approve:boolean){if(!confirm(`${approve?'Approve':'Reject'} this staff request?`))return;saving.value=true;error.value='';notice.value='';try{const {error:e}=await db.rpc('review_staff_request',{p_request_id:id,p_approve:approve});if(e)throw e;notice.value=approve?'Staff member approved.':'Request rejected.';await load()}catch(e:any){error.value=e.message}finally{saving.value=false}}
 async function revoke(userId:string){if(!confirm('Remove this teacher’s access to this school?'))return;saving.value=true;error.value='';notice.value='';try{const {error:e}=await db.rpc('revoke_school_staff',{p_school_id:schoolId.value,p_user_id:userId});if(e)throw e;notice.value='Teacher access removed.';await load()}catch(e:any){error.value=e.message}finally{saving.value=false}}
 async function changeRole(userId:string){
   if(!isPlatformAdmin.value || !schoolId.value || !['teacher','school_admin'].includes(editingRole.value))return
@@ -131,7 +131,22 @@ async function decidePromotion(requestId:string,approve:boolean){
   }catch(e:any){error.value=e.message||'Unable to review request'}
   finally{saving.value=false}
 }
-async function invite(){saving.value=true;error.value='';notice.value='';try{const {data:{session}}=await db.auth.getSession();if(!session)throw Error('Sign in again');const r=await $fetch<{message:string}>('/api/staff/invite',{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`},body:{school_id:schoolId.value,email:inviteEmail.value}});notice.value=r.message;inviteEmail.value='';dismissAction()}catch(e:any){error.value=e?.data?.statusMessage||e.message||'Unable to send invitation'}finally{saving.value=false}}
+async function cancelInvite(id:string){
+ if(!confirm('Cancel this invitation?'))return
+ saving.value=true;error.value='';notice.value=''
+ try{const {error:e}=await db.rpc('cancel_school_staff_invitation',{p_school_id:schoolId.value,p_invitation_id:id});if(e)throw e;notice.value='Invitation cancelled.';await load()}
+ catch(e:any){error.value=e.message||'Unable to cancel invitation'}finally{saving.value=false}
+}
+async function resendInvite(email:string){
+ if(!confirm(`Send a new invitation to ${email}? The previous link will stop working.`))return
+ saving.value=true;error.value='';notice.value=''
+ try{
+ const {data:{session}}=await db.auth.getSession();if(!session)throw Error('Sign in again')
+ const r=await $fetch<{message:string}>('/api/staff/invite',{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`},body:{school_id:schoolId.value,email}})
+ notice.value=r.message;await load()
+ }catch(e:any){error.value=e?.data?.statusMessage||e.message||'Unable to resend invitation'}finally{saving.value=false}
+}
+async function invite(){saving.value=true;error.value='';notice.value='';try{const {data:{session}}=await db.auth.getSession();if(!session)throw Error('Sign in again');const r=await $fetch<{message:string}>('/api/staff/invite',{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`},body:{school_id:schoolId.value,email:inviteEmail.value}});notice.value=r.message;inviteEmail.value='';dismissAction();await load()}catch(e:any){error.value=e?.data?.statusMessage||e.message||'Unable to send invitation'}finally{saving.value=false}}
 </script>
 <template><div class="page"><div class="shell admin-section"><NuxtLink to="/school/dashboard">← School Dashboard</NuxtLink><h1>{{schoolName}} — Staff</h1><p v-if="busy">Loading…</p><p v-if="error" class="error" role="alert">{{error}}</p><p v-if="notice" class="success" role="status">{{notice}}</p><template v-if="!busy&&schoolId"><AdminActionModal :open="actionModal && isAdmin" :title="actionKind==='assign'?'Assign Staff':'Invite Staff'" @close="dismissAction">
 <div v-if="actionKind==='assign'">
@@ -143,7 +158,13 @@ async function invite(){saving.value=true;error.value='';notice.value='';try{con
   <label class="field"><span>School role</span><select v-model="assignRole"><option value="teacher">Teacher</option><option v-if="isPlatformAdmin" value="school_admin">School Administrator</option></select></label>
   <div style="display:flex;gap:.75rem;margin-top:1rem"><button type="button" class="btn" :disabled="saving||!selectedStaff" @click="assignStaff">{{saving?'Assigning…':'Assign Staff'}}</button><button type="button" class="btn" :disabled="saving" @click="dismissAction">Cancel</button></div>
 </div>
-<div v-else><h2>Invite a teacher</h2><p>Invitations are emailed to staff. They must verify their email and be approved before access is granted.</p><form @submit.prevent="invite"><label class="field"><span>Staff email address</span><input v-model="inviteEmail" type="email" required maxlength="254" placeholder="teacher@school.edu.au"></label><button class="btn" :disabled="saving">{{saving?'Sending…':'Send staff invitation'}}</button></form></div></AdminActionModal><div v-if="isAdmin" class="card" style="margin-top:1rem"><h2>Registration requests</h2><div v-for="r in requests" :key="r.id" class="data-row" style="display:flex;justify-content:space-between;gap:1rem;align-items:center"><div><strong>{{r.given_name}} {{r.family_name}}</strong><div>{{r.email}} · {{r.status}}</div></div><div v-if="r.status==='pending'" style="display:flex;gap:.5rem"><button class="btn" :disabled="saving" @click="review(r.id,true)">Approve</button><button class="btn" :disabled="saving" @click="review(r.id,false)">Reject</button></div></div><p v-if="!requests.length">No staff requests yet.</p></div><div v-if="promotionRequests.length" class="card" style="margin-top:1rem">
+<div v-else><h2>Invite a teacher</h2><p>Invitations are emailed to staff. After accepting with their verified school email, they are automatically assigned as a Teacher.</p><form @submit.prevent="invite"><label class="field"><span>Staff email address</span><input v-model="inviteEmail" type="email" required maxlength="254" placeholder="teacher@school.edu.au"></label><button class="btn" :disabled="saving">{{saving?'Sending…':'Send staff invitation'}}</button></form></div></AdminActionModal><div v-if="isAdmin" class="card" style="margin-top:1rem"><h2>Staff Invitations</h2>
+<div v-for="i in invitations" :key="i.id" class="data-row" style="display:flex;justify-content:space-between;align-items:center;gap:1rem">
+<div><strong>{{i.email}}</strong><small style="display:block">Sent {{new Date(i.created_at).toLocaleDateString()}} · {{i.accepted_at?'Accepted':i.revoked_at?'Cancelled':new Date(i.expires_at).getTime()<=Date.now()?'Expired':'Pending'}}</small></div>
+<div v-if="!i.accepted_at && !i.revoked_at && new Date(i.expires_at).getTime()>Date.now()" style="display:flex;gap:.5rem">
+<button class="btn" :disabled="saving" @click="resendInvite(i.email)">Resend</button>
+<button class="btn" :disabled="saving" @click="cancelInvite(i.id)">Cancel</button>
+</div></div><p v-if="!invitations.length">No invitations sent to this school yet.</p></div><div v-if="promotionRequests.length" class="card" style="margin-top:1rem">
 <h2>School Administrator promotion requests</h2>
 <div v-for="r in promotionRequests" :key="r.id" class="data-row" style="display:flex;justify-content:space-between;gap:1rem;align-items:center">
 <div><strong>{{r.staff_name || r.staff_email || r.user_id}}</strong><small style="display:block">{{r.status}} · Requested {{new Date(r.created_at).toLocaleDateString()}}</small></div>
