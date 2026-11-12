@@ -9,6 +9,8 @@ const selected = ref('')
 const blank = () => ({ name:'', sport_id:'', school_year:new Date().getFullYear(), starts_on:'' })
 const form = ref(blank())
 const editForm = ref({name:'',starts_on:'',status:'draft'})
+const windowForm = ref({opens:'',closes:''})
+const windowSaving = ref(false)
 const eventForm = ref({event_definition_id:'',age_group:'',division:'',is_team:false})
 
 const actionModal = ref(false)
@@ -23,6 +25,8 @@ watch(()=>route.query.action,(action)=>{
 const selectedCompetition = computed(() => competitions.value.find(c => c.id === selected.value))
 const eligibleDefinitions = computed(() => definitions.value.filter(d => d.sport_id === selectedCompetition.value?.sport_id))
 const selectedEvents = computed(() => events.value.filter(e => e.competition_id === selected.value))
+const canEditSelected = computed(() => canEdit.value && selectedCompetition.value?.organiser_school_id === schoolId.value && selectedCompetition.value?.competition_type === 'intra_school')
+const windowValid = computed(() => !windowForm.value.opens || !windowForm.value.closes || windowForm.value.opens <= windowForm.value.closes)
 const definitionName = (id:string) => definitions.value.find(d => d.id === id)?.name || 'Event'
 const sportName = (id:string) => sports.value.find(s => s.id === id)?.name || 'Sport'
 async function load() {
@@ -41,7 +45,7 @@ async function load() {
     const [sp,defs,owned,joined]=await Promise.all([
       db.from('sports').select('id,name').order('name'),
       db.from('event_definitions').select('id,sport_id,name,measurement').order('name'),
-      db.from('competitions').select('id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id').eq('organiser_school_id',schoolId.value).order('created_at',{ascending:false}).limit(200),
+      db.from('competitions').select('id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id,registration_opens_at,registration_closes_at').eq('organiser_school_id',schoolId.value).order('created_at',{ascending:false}).limit(200),
       db.from('competition_schools').select('competition_id,competitions(id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id)').eq('school_id',schoolId.value).limit(200)
     ])
     const failure=[sp,defs,owned,joined].find(x=>x.error)?.error
@@ -65,10 +69,35 @@ async function loadEvents() {
 }
 watch(selected,async()=>{
   const c=selectedCompetition.value
-  if(c) editForm.value={name:c.name,starts_on:c.starts_on||'',status:c.status}
+  if(c) {
+    editForm.value={name:c.name,starts_on:c.starts_on||'',status:c.status}
+    windowForm.value={opens:toLocalInput(c.registration_opens_at),closes:toLocalInput(c.registration_closes_at)}
+  }
   eventForm.value={event_definition_id:'',age_group:'',division:'',is_team:false}
   if(!loading.value) {try {await loadEvents()}catch(e:any){error.value=e.message}}
 })
+function toLocalInput(value:string|null|undefined) {
+  if(!value)return ''
+  const d=new Date(value)
+  if(Number.isNaN(d.getTime()))return ''
+  const local=new Date(d.getTime()-d.getTimezoneOffset()*60000)
+  return local.toISOString().slice(0,16)
+}
+async function saveRegistrationWindow(){
+  if(!canEditSelected.value || !selected.value || !windowValid.value || windowSaving.value)return
+  windowSaving.value=true;error.value='';notice.value=''
+  try {
+    const {error:err}=await db.rpc('school_set_registration_window',{
+      p_school:schoolId.value,p_comp:selected.value,
+      p_opens:windowForm.value.opens?new Date(windowForm.value.opens).toISOString():null,
+      p_closes:windowForm.value.closes?new Date(windowForm.value.closes).toISOString():null
+    })
+    if(err)throw err
+    notice.value='Registration dates saved.'
+    await load()
+  }catch(e:any){error.value=e.message||'Unable to save registration dates'}
+  finally{windowSaving.value=false}
+}
 async function perform(work:()=>Promise<any>,success:string) {
   if(saving.value)return
   saving.value=true;error.value='';notice.value=''
@@ -128,6 +157,17 @@ onMounted(load)
             <label class="field"><span>Status</span><select v-model="editForm.status"><option value="draft">Draft</option><option value="registration">Registration</option><option value="active">Active</option><option value="completed">Completed</option><option value="archived">Archived</option></select></label>
             <button class="btn primary" type="submit" :disabled="saving">Save Changes</button>
           </form>
+        </div>
+        <div class="card" style="margin-bottom:1rem">
+          <h2>Registration Window</h2>
+          <p class="notice">Configure the registration schedule. Enforcement in the registration functions is a separate step. Dates are saved in your browser's local time and stored in UTC.</p>
+          <form v-if="canEditSelected" class="form-grid" @submit.prevent="saveRegistrationWindow">
+            <label class="field"><span>Registrations open (optional)</span><input v-model="windowForm.opens" type="datetime-local" /></label>
+            <label class="field"><span>Registrations close (optional)</span><input v-model="windowForm.closes" type="datetime-local" /></label>
+            <p v-if="!windowValid" class="error" role="alert">The closing date must be after the opening date.</p>
+            <button class="btn primary" type="submit" :disabled="windowSaving || !windowValid">{{windowSaving?'Saving…':'Save Registration Dates'}}</button>
+          </form>
+          <p v-else>{{selectedCompetition.registration_opens_at ? new Date(selectedCompetition.registration_opens_at).toLocaleString() : 'No opening date'}} — {{selectedCompetition.registration_closes_at ? new Date(selectedCompetition.registration_closes_at).toLocaleString() : 'No closing date'}}</p>
         </div>
         <div class="card">
           <h2>Events ({{selectedEvents.length}})</h2>
