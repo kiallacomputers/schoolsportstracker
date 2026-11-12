@@ -11,6 +11,8 @@ const form = ref(blank())
 const editForm = ref({name:'',starts_on:'',status:'draft'})
 const windowForm = ref({opens:'',closes:''})
 const windowSaving = ref(false)
+const cutoffForm = ref({mode:'calendar_year',custom:''})
+const cutoffSaving = ref(false)
 const eventForm = ref({event_definition_id:'',age_group:'',division:'',is_team:false})
 
 const actionModal = ref(false)
@@ -31,6 +33,8 @@ const registrationReadiness = computed(() => {
   if (!c) return { label: 'No competition selected', items: [] as string[] }
   const items: string[] = []
   if (!selectedEvents.value.length) items.push('Add at least one event')
+  if(c.age_cutoff_mode==='competition_date' && !c.starts_on)items.push('Set a competition date for the age cutoff')
+  if(c.age_cutoff_mode==='custom' && !c.age_cutoff_date)items.push('Set the custom age cutoff date')
   if (!c.registration_opens_at || !c.registration_closes_at) items.push('Set both registration opening and closing dates')
   if (c.status !== 'registration') items.push('Change competition status to Registration when ready')
   if (c.registration_closes_at && new Date(c.registration_closes_at).getTime() <= Date.now()) items.push('Registration closing date has passed')
@@ -39,6 +43,13 @@ const registrationReadiness = computed(() => {
 })
 
 const canEditSelected = computed(() => canEdit.value && selectedCompetition.value?.organiser_school_id === schoolId.value && selectedCompetition.value?.competition_type === 'intra_school')
+const cutoffDescription = computed(() => {
+ const c=selectedCompetition.value
+ if(!c)return ''
+ const date=c.age_cutoff_mode==='competition_date' ? c.starts_on :
+   c.age_cutoff_mode==='custom' ? c.age_cutoff_date : `${c.school_year}-12-31`
+ return date ? `Sporting age is calculated on ${date}.` : 'Set a competition date or choose another cutoff.'
+})
 const windowValid = computed(() => !windowForm.value.opens || !windowForm.value.closes || windowForm.value.opens <= windowForm.value.closes)
 const definitionName = (id:string) => definitions.value.find(d => d.id === id)?.name || 'Event'
 const sportName = (id:string) => sports.value.find(s => s.id === id)?.name || 'Sport'
@@ -63,7 +74,7 @@ async function load() {
     const [sp,defs,owned,joined]=await Promise.all([
       db.from('sports').select('id,name').order('name'),
       db.from('event_definitions').select('id,sport_id,name,measurement').order('name'),
-      db.from('competitions').select('id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id,registration_opens_at,registration_closes_at').order('created_at',{ascending:false}).limit(1000),
+      db.from('competitions').select('id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id,registration_opens_at,registration_closes_at,age_cutoff_mode,age_cutoff_date').order('created_at',{ascending:false}).limit(1000),
       db.from('competition_schools').select('competition_id,competitions(id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id)').eq('school_id',schoolId.value).limit(200)
     ])
     const failure=[sp,defs,owned,joined].find(x=>x.error)?.error
@@ -92,6 +103,7 @@ watch(selected,async()=>{
   if(c) {
     editForm.value={name:c.name,starts_on:c.starts_on||'',status:c.status}
     windowForm.value={opens:toLocalInput(c.registration_opens_at),closes:toLocalInput(c.registration_closes_at)}
+    cutoffForm.value={mode:c.age_cutoff_mode||'calendar_year',custom:c.age_cutoff_date||''}
   }
   eventForm.value={event_definition_id:'',age_group:'',division:'',is_team:false}
   if(!loading.value) {try {await loadEvents()}catch(e:any){error.value=e.message}}
@@ -117,6 +129,23 @@ async function saveRegistrationWindow(){
     await load()
   }catch(e:any){error.value=e.message||'Unable to save registration dates'}
   finally{windowSaving.value=false}
+}
+async function saveAgeCutoff(){
+ if(!canEditSelected.value || !selected.value || cutoffSaving.value)return
+ if(cutoffForm.value.mode==='custom' && !cutoffForm.value.custom){error.value='Choose a custom cutoff date.';return}
+ if(cutoffForm.value.mode==='competition_date' && !selectedCompetition.value?.starts_on){error.value='Set the competition date before selecting this cutoff.';return}
+ cutoffSaving.value=true;error.value='';notice.value=''
+ try{
+  const {error:e}=await db.rpc('school_set_age_cutoff',{
+   p_school:schoolId.value,p_comp:selected.value,
+   p_mode:cutoffForm.value.mode,
+   p_date:cutoffForm.value.mode==='custom'?cutoffForm.value.custom:null
+  })
+  if(e)throw e
+  notice.value='Sporting age cutoff saved.'
+  await load()
+ }catch(e:any){error.value=e.message||'Unable to save age cutoff'}
+ finally{cutoffSaving.value=false}
 }
 async function perform(work:()=>Promise<any>,success:string) {
   if(saving.value)return
@@ -190,6 +219,21 @@ onMounted(load)
             <button class="btn primary" type="submit" :disabled="windowSaving || !windowValid">{{windowSaving?'Saving…':'Save Registration Dates'}}</button>
           </form>
           <p v-else>{{selectedCompetition.registration_opens_at ? new Date(selectedCompetition.registration_opens_at).toLocaleString() : 'No opening date'}} — {{selectedCompetition.registration_closes_at ? new Date(selectedCompetition.registration_closes_at).toLocaleString() : 'No closing date'}}</p>
+        </div>
+        <div class="card" style="margin-bottom:1rem">
+          <h2>Sporting Age Eligibility</h2>
+          <p class="notice">Age is calculated from the student's imported date of birth. Choose the cutoff used by this competition. Under 14 means students younger than 14 on the cutoff date; other age labels require explicit rules before student registration opens.</p>
+          <p><strong>{{cutoffDescription}}</strong></p>
+          <form v-if="canEditSelected" class="form-grid" @submit.prevent="saveAgeCutoff">
+            <label class="field"><span>Age calculated on</span><select v-model="cutoffForm.mode">
+              <option value="calendar_year">31 December of competition year</option>
+              <option value="competition_date">Competition date</option>
+              <option value="custom">Custom date</option>
+            </select></label>
+            <label v-if="cutoffForm.mode==='custom'" class="field"><span>Custom cutoff date</span><input v-model="cutoffForm.custom" type="date" required /></label>
+            <button class="btn primary" type="submit" :disabled="cutoffSaving">{{cutoffSaving?'Saving…':'Save Age Eligibility'}}</button>
+          </form>
+          <p class="notice">This sets the competition-wide rule. Student-facing filtering and server-side entry validation will use this cutoff in the registration phase.</p>
         </div>
         <div class="card" style="margin-bottom:1rem">
           <h2>Competition Setup Checklist</h2>
