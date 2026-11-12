@@ -62,6 +62,7 @@ const links = computed(() => {
       {label:'School Requests',to:'/admin/school-requests',icon:'📨'},
       {label:'Student Approvals',to:'/admin/student-requests',icon:'✓'},
       {label:'Email Settings',to:'/admin/email',icon:'✉'},
+      {label:'All Competitions',to:'/admin/competitions',icon:'🏆'},
       ...(activeSchool.value ? [
         {label:'Students',to:'/school/students'+suffix,icon:'🎓'},
         {label:'Year Rollover',to:'/school/rollover'+suffix,icon:'📅'},

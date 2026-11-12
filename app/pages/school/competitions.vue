@@ -3,7 +3,7 @@ const db = useSupabaseClient()
 const route = useRoute()
 const schoolId = computed(() => typeof route.query.school === 'string' ? route.query.school : '')
 const loading = ref(true), saving = ref(false), error = ref(''), notice = ref('')
-const schoolName = ref(''), canEdit = ref(false)
+const schoolName = ref(''), canEdit = ref(false), isSuperAdmin = ref(false), showAllCompetitions = ref(false)
 const sports = ref<any[]>([]), definitions = ref<any[]>([]), competitions = ref<any[]>([]), events = ref<any[]>([])
 const selected = ref('')
 const blank = () => ({ name:'', sport_id:'', school_year:new Date().getFullYear(), starts_on:'' })
@@ -23,6 +23,7 @@ watch(()=>route.query.action,(action)=>{
   if(typeof action==='string' && ['add','event'].includes(action)){actionKind.value=action;actionModal.value=true}
 },{immediate:true})
 const selectedCompetition = computed(() => competitions.value.find(c => c.id === selected.value))
+const visibleCompetitions = computed(() => isSuperAdmin.value && showAllCompetitions.value ? competitions.value : competitions.value.filter(c => c.organiser_school_id === schoolId.value || c.joinedSchool === true))
 const eligibleDefinitions = computed(() => definitions.value.filter(d => d.sport_id === selectedCompetition.value?.sport_id))
 const selectedEvents = computed(() => events.value.filter(e => e.competition_id === selected.value))
 const registrationReadiness = computed(() => {
@@ -52,22 +53,27 @@ async function load() {
     const platform=await db.rpc('is_platform_admin')
     if(platform.error)throw platform.error
     if(!platform.data && (!member.data || !['school_admin','teacher'].includes(member.data.role))) throw new Error('You do not have access to this school.')
-    canEdit.value=platform.data===true || member.data?.role==='school_admin'
-    schoolName.value=(member.data.schools as any)?.name || 'School'
+    isSuperAdmin.value=platform.data===true
+    canEdit.value=isSuperAdmin.value || member.data?.role==='school_admin'
+    if (isSuperAdmin.value) {
+      const school = await db.from('schools').select('name').eq('id',schoolId.value).single()
+      if (school.error) throw school.error
+      schoolName.value=school.data.name
+    } else schoolName.value=(member.data?.schools as any)?.name || 'School'
     const [sp,defs,owned,joined]=await Promise.all([
       db.from('sports').select('id,name').order('name'),
       db.from('event_definitions').select('id,sport_id,name,measurement').order('name'),
-      db.from('competitions').select('id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id,registration_opens_at,registration_closes_at').eq('organiser_school_id',schoolId.value).order('created_at',{ascending:false}).limit(200),
+      db.from('competitions').select('id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id,registration_opens_at,registration_closes_at').order('created_at',{ascending:false}).limit(1000),
       db.from('competition_schools').select('competition_id,competitions(id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id)').eq('school_id',schoolId.value).limit(200)
     ])
     const failure=[sp,defs,owned,joined].find(x=>x.error)?.error
     if(failure) throw failure
     sports.value=sp.data||[]; definitions.value=defs.data||[]
     const map=new Map<string,any>()
-    for(const c of owned.data||[]) map.set(c.id,c)
-    for(const r of joined.data||[]) {const c:any=r.competitions;if(c&&!Array.isArray(c)) map.set(c.id,c)}
+    for(const c of owned.data||[]) if(isSuperAdmin.value || c.organiser_school_id===schoolId.value) map.set(c.id,c)
+    for(const r of joined.data||[]) {const c:any=r.competitions;if(c&&!Array.isArray(c)) map.set(c.id,{...c,joinedSchool:true})}
     competitions.value=[...map.values()]
-    if(!competitions.value.some(c=>c.id===selected.value)) selected.value=competitions.value[0]?.id||''
+    if(!visibleCompetitions.value.some(c=>c.id===selected.value)) selected.value=visibleCompetitions.value[0]?.id||''
     await loadEvents()
   } catch(e:any) {error.value=e.message||'Unable to load competitions'}
   finally {loading.value=false}
@@ -79,6 +85,8 @@ async function loadEvents() {
   if(r.error) throw r.error
   events.value=r.data||[]
 }
+watch(showAllCompetitions,()=>{if(!visibleCompetitions.value.some(c=>c.id===selected.value))selected.value=visibleCompetitions.value[0]?.id||''})
+watch(()=>route.query.school,()=>load())
 watch(selected,async()=>{
   const c=selectedCompetition.value
   if(c) {
@@ -121,15 +129,15 @@ function createCompetition(){
   perform(()=>db.rpc('school_create_competition',{p_school:schoolId.value,p_name:form.value.name,p_sport:form.value.sport_id,p_year:Number(form.value.school_year),p_date:form.value.starts_on||null}).then(r=>{if(!r.error){selected.value=r.data;form.value=blank()}return r}),'Competition created.')
 }
 function updateCompetition(){
-  if(!canEdit.value||!selected.value)return
+  if(!canEditSelected.value||!selected.value)return
   perform(()=>db.rpc('school_update_competition',{p_school:schoolId.value,p_comp:selected.value,p_name:editForm.value.name,p_date:editForm.value.starts_on||null,p_status:editForm.value.status}),'Competition updated.')
 }
 function addEvent(){
-  if(!canEdit.value||!selected.value)return
+  if(!canEditSelected.value||!selected.value)return
   perform(()=>db.rpc('school_add_competition_event',{p_school:schoolId.value,p_comp:selected.value,p_definition:eventForm.value.event_definition_id,p_age:eventForm.value.age_group||null,p_division:eventForm.value.division||null,p_team:eventForm.value.is_team}),'Event added.')
 }
 function removeEvent(id:string){
-  if(!canEdit.value||!confirm('Remove this event? This is only allowed before rounds or entries exist.'))return
+  if(!canEditSelected.value||!confirm('Remove this event? This is only allowed before rounds or entries exist.'))return
   perform(()=>db.rpc('school_remove_competition_event',{p_school:schoolId.value,p_event:id}),'Event removed.')
 }
 onMounted(load)
@@ -154,13 +162,15 @@ onMounted(load)
         </form>
       </div></AdminActionModal>
       <div class="card" style="margin-bottom:1rem">
-        <h2>Competitions ({{competitions.length}})</h2>
-        <p v-if="!competitions.length">No competitions associated with this school yet.</p>
-        <label v-else class="field"><span>Choose competition</span><select v-model="selected"><option v-for="c in competitions" :key="c.id" :value="c.id">{{c.name}} · {{c.school_year}} · {{c.status}}</option></select></label>
+        <h2>Competitions ({{visibleCompetitions.length}})</h2>
+        <label v-if="isSuperAdmin" class="field"><input v-model="showAllCompetitions" type="checkbox" /> Show competitions across all schools</label>
+        <p v-if="!visibleCompetitions.length">No competitions associated with this school yet.</p>
+        <label v-else class="field"><span>Choose competition</span><select v-model="selected"><option v-for="c in visibleCompetitions" :key="c.id" :value="c.id">{{c.name}} · {{c.school_year}} · {{c.status}}</option></select></label>
       </div>
       <template v-if="selectedCompetition">
         <div class="card" style="margin-bottom:1rem">
           <h2>{{selectedCompetition.name}}</h2>
+          <NuxtLink v-if="isSuperAdmin && selectedCompetition.organiser_school_id !== schoolId" :to="{path:'/school/competitions',query:{school:selectedCompetition.organiser_school_id}}">Open organising school to manage this competition</NuxtLink>
           <p>{{sportName(selectedCompetition.sport_id)}} · {{selectedCompetition.school_year}} · {{selectedCompetition.status}}</p>
           <p v-if="selectedCompetition.organiser_school_id!==schoolId || selectedCompetition.competition_type!=='intra_school'" class="notice">This competition is managed by its organiser. You can view its events but cannot edit it here.</p>
           <form v-else-if="canEdit" class="form-grid" @submit.prevent="updateCompetition">
