@@ -14,6 +14,8 @@ const windowSaving = ref(false)
 const cutoffForm = ref({mode:'calendar_year',custom:''})
 const cutoffSaving = ref(false)
 const eventForm = ref({event_definition_id:'',age_group:'',division:'',is_team:false})
+const ageEdit = ref<Record<string,{min:string,max:string}>>({})
+const ageSaving = ref('')
 
 const actionModal = ref(false)
 const actionKind = ref('')
@@ -92,9 +94,10 @@ async function load() {
 async function loadEvents() {
   events.value=[]
   if(!selected.value)return
-  const r=await db.from('competition_events').select('id,competition_id,event_definition_id,age_group,division,is_team').eq('competition_id',selected.value).limit(500)
+  const r=await db.from('competition_events').select('id,competition_id,event_definition_id,age_group,division,is_team,min_age,max_age').eq('competition_id',selected.value).limit(500)
   if(r.error) throw r.error
   events.value=r.data||[]
+  ageEdit.value=Object.fromEntries(events.value.map((e:any)=>[e.id,{min:e.min_age==null?'':String(e.min_age),max:e.max_age==null?'':String(e.max_age)}]))
 }
 watch(showAllCompetitions,()=>{if(!visibleCompetitions.value.some(c=>c.id===selected.value))selected.value=visibleCompetitions.value[0]?.id||''})
 watch(()=>route.query.school,()=>load())
@@ -164,6 +167,22 @@ function updateCompetition(){
 function addEvent(){
   if(!canEditSelected.value||!selected.value)return
   perform(()=>db.rpc('school_add_competition_event',{p_school:schoolId.value,p_comp:selected.value,p_definition:eventForm.value.event_definition_id,p_age:eventForm.value.age_group||null,p_division:eventForm.value.division||null,p_team:eventForm.value.is_team}),'Event added.')
+}
+async function saveEventAge(ev:any){
+  if(!canEditSelected.value || ageSaving.value)return
+  const v=ageEdit.value[ev.id]
+  const min=v.min===''?null:Number(v.min), max=v.max===''?null:Number(v.max)
+  if((min!==null&&(!Number.isInteger(min)||min<3||min>30))||(max!==null&&(!Number.isInteger(max)||max<3||max>30))||(min!==null&&max!==null&&min>max)){
+    error.value='Enter valid ages between 3 and 30, with minimum not exceeding maximum.';return
+  }
+  ageSaving.value=ev.id;error.value='';notice.value=''
+  try{
+    const {error:e}=await db.rpc('school_set_event_age_limits',{p_school:schoolId.value,p_event:ev.id,p_min:min,p_max:max})
+    if(e)throw e
+    notice.value='Event age eligibility saved.'
+    await loadEvents()
+  }catch(e:any){error.value=e.message||'Could not save age limits'}
+  finally{ageSaving.value=''}
 }
 function removeEvent(id:string){
   if(!canEditSelected.value||!confirm('Remove this event? This is only allowed before rounds or entries exist.'))return
@@ -247,7 +266,14 @@ onMounted(load)
         <div class="card">
           <h2>Events ({{selectedEvents.length}})</h2>
           <div v-for="ev in selectedEvents" :key="ev.id" class="data-row" style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
-            <div><strong>{{definitionName(ev.event_definition_id)}}</strong><div><small>{{ev.age_group||'All ages'}} · {{ev.division||'Open'}} · {{ev.is_team?'Team':'Individual'}}</small></div></div>
+            <div><strong>{{definitionName(ev.event_definition_id)}}</strong><div><small>{{ev.age_group||'All ages'}} · {{ev.division||'Open'}} · {{ev.is_team?'Team':'Individual'}}</small></div>
+              <div v-if="canEditSelected && ageEdit[ev.id]" style="display:flex;gap:.5rem;align-items:end;flex-wrap:wrap;margin-top:.5rem">
+                <label class="field"><span>Minimum age</span><input v-model="ageEdit[ev.id]!.min" type="number" min="3" max="30" placeholder="Any" style="max-width:7rem" /></label>
+                <label class="field"><span>Maximum age</span><input v-model="ageEdit[ev.id]!.max" type="number" min="3" max="30" placeholder="Any" style="max-width:7rem" /></label>
+                <button class="btn" :disabled="!!ageSaving" @click="saveEventAge(ev)">{{ageSaving===ev.id?'Saving…':'Save ages'}}</button>
+              </div>
+              <small v-else>Eligible ages: {{ev.min_age??'Any'}}–{{ev.max_age??'Any'}}</small>
+            </div>
             <button v-if="canEdit && selectedCompetition.organiser_school_id===schoolId && selectedCompetition.competition_type==='intra_school'" class="btn" type="button" :disabled="saving" @click="removeEvent(ev.id)">Remove</button>
           </div>
           <p v-if="!selectedEvents.length">No events configured yet.</p>
