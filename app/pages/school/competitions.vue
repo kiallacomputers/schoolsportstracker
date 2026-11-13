@@ -18,6 +18,8 @@ const ageEdit = ref<Record<string,{min:string,max:string}>>({})
 const ageSaving = ref('')
 const capacityEdit=ref<Record<string,string>>({})
 const capacitySaving=ref('')
+const raceEdit=ref<Record<string,{lanes:string,heats:string,qualification:string}>>({})
+const raceSaving=ref('')
 const competitionLimit=ref('')
 const limitSaving=ref(false)
 
@@ -99,11 +101,12 @@ async function load() {
 async function loadEvents() {
   events.value=[]
   if(!selected.value)return
-  const r=await db.from('competition_events').select('id,competition_id,event_definition_id,age_group,division,is_team,min_age,max_age,max_participants').eq('competition_id',selected.value).limit(500)
+  const r=await db.from('competition_events').select('id,competition_id,event_definition_id,age_group,division,is_team,min_age,max_age,max_participants,race_lanes,race_max_heats,race_qualification').eq('competition_id',selected.value).limit(500)
   if(r.error) throw r.error
   events.value=r.data||[]
   ageEdit.value=Object.fromEntries(events.value.map((e:any)=>[e.id,{min:e.min_age==null?'':String(e.min_age),max:e.max_age==null?'':String(e.max_age)}]))
   capacityEdit.value=Object.fromEntries(events.value.map((e:any)=>[e.id,e.max_participants==null?'':String(e.max_participants)]))
+  raceEdit.value=Object.fromEntries(events.value.map((e:any)=>[e.id,{lanes:e.race_lanes==null?'':String(e.race_lanes),heats:e.race_max_heats==null?'':String(e.race_max_heats),qualification:e.race_qualification||'positions_plus_times'}]))
 }
 watch(showAllCompetitions,()=>{if(!visibleCompetitions.value.some(c=>c.id===selected.value))selected.value=visibleCompetitions.value[0]?.id||''})
 watch(()=>route.query.school,()=>load())
@@ -181,6 +184,19 @@ async function saveCompetitionLimit(){
  limitSaving.value=true;error.value='';notice.value=''
  try{const {error:e}=await db.rpc('school_set_competition_entry_limit',{p_school:schoolId.value,p_comp:selected.value,p_limit:n});if(e)throw e;notice.value='Competition entry limit saved.';await load()}
  catch(e:any){error.value=e.message||'Unable to save limit'}finally{limitSaving.value=false}
+}
+async function saveRaceSettings(ev:any){
+ if(!canEditSelected.value||raceSaving.value)return
+ const v=raceEdit.value[ev.id]
+ const lanes=Number(v?.lanes),heats=Number(v?.heats)
+ if(!Number.isInteger(lanes)||lanes<1||lanes>20||!Number.isInteger(heats)||heats<1||heats>30){error.value='Enter 1–20 lanes and 1–30 maximum heats.';return}
+ raceSaving.value=ev.id;error.value='';notice.value=''
+ try{
+  const {error:e}=await db.rpc('school_set_race_settings',{p_school:schoolId.value,p_event:ev.id,p_lanes:lanes,p_max_heats:heats,p_qualification:v.qualification})
+  if(e)throw e
+  notice.value=`Race configured: ${lanes} lanes × ${heats} heats = ${lanes*heats} places.`
+  await loadEvents()
+ }catch(e:any){error.value=e.message||'Could not save race settings'}finally{raceSaving.value=''}
 }
 async function saveEventCapacity(ev:any){
  if(!canEditSelected.value||capacitySaving.value)return
@@ -305,8 +321,18 @@ onMounted(load)
               </div>
               <small v-else>Eligible ages: {{ev.min_age??'Any'}}–{{ev.max_age??'Any'}}</small>
               <div v-if="canEditSelected && !ev.is_team" style="display:flex;gap:.5rem;align-items:end;flex-wrap:wrap;margin-top:.5rem">
-                <label class="field"><span>Maximum participants</span><input v-model="capacityEdit[ev.id]" type="number" min="1" max="10000" placeholder="Unlimited" style="max-width:9rem" /></label>
-                <button class="btn" :disabled="!!capacitySaving" @click="saveEventCapacity(ev)">{{capacitySaving===ev.id?'Saving…':'Save Capacity'}}</button>
+                <div v-if="!ev.is_team" class="card" style="margin:0.6rem 0;padding:0.8rem">
+                <strong>Track race configuration</strong>
+                <div class="form-grid">
+                  <label class="field"><span>Available lanes</span><input v-model="raceEdit[ev.id].lanes" type="number" min="1" max="20" placeholder="e.g. 8" /></label>
+                  <label class="field"><span>Maximum heats</span><input v-model="raceEdit[ev.id].heats" type="number" min="1" max="30" placeholder="e.g. 3" /></label>
+                  <label class="field"><span>Final qualification</span><select v-model="raceEdit[ev.id].qualification"><option value="positions_plus_times">Heat positions + fastest remaining</option><option value="fastest_times">Fastest overall times</option><option value="positions">Heat finishing positions</option></select></label>
+                </div>
+                <p v-if="Number(raceEdit[ev.id]?.lanes)>0 && Number(raceEdit[ev.id]?.heats)>0" class="notice">Maximum entries: {{Number(raceEdit[ev.id].lanes)*Number(raceEdit[ev.id].heats)}}. Unused heats will not be generated.</p>
+                <button class="btn" :disabled="!!raceSaving" @click="saveRaceSettings(ev)">{{raceSaving===ev.id?'Saving…':'Save Race Settings'}}</button>
+              </div>
+              <label class="field"><span>Maximum participants</span><input v-model="capacityEdit[ev.id]" :disabled="!!ev.race_lanes" type="number" min="1" max="10000" placeholder="Unlimited" style="max-width:9rem" /></label>
+                <button class="btn" :disabled="!!capacitySaving" @click="saveEventCapacity(ev)" :disabled="!!ev.race_lanes || !!capacitySaving">{{capacitySaving===ev.id?'Saving…':'Save Capacity'}}</button>
               </div>
               <small v-else-if="!ev.is_team">Capacity: {{ev.max_participants??'Unlimited'}}</small>
             </div>
