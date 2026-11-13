@@ -16,6 +16,10 @@ const cutoffSaving = ref(false)
 const eventForm = ref({event_definition_id:'',age_group:'',division:'',is_team:false})
 const ageEdit = ref<Record<string,{min:string,max:string}>>({})
 const ageSaving = ref('')
+const capacityEdit=ref<Record<string,string>>({})
+const capacitySaving=ref('')
+const competitionLimit=ref('')
+const limitSaving=ref(false)
 
 const actionModal = ref(false)
 const actionKind = ref('')
@@ -27,6 +31,7 @@ watch(()=>route.query.action,(action)=>{
   if(typeof action==='string' && ['add','event'].includes(action)){actionKind.value=action;actionModal.value=true}
 },{immediate:true})
 const selectedCompetition = computed(() => competitions.value.find(c => c.id === selected.value))
+watch(selectedCompetition,(c)=>{competitionLimit.value=c?.max_events_per_student==null?'':String(c.max_events_per_student)},{immediate:true})
 const visibleCompetitions = computed(() => isSuperAdmin.value && showAllCompetitions.value ? competitions.value : competitions.value.filter(c => c.organiser_school_id === schoolId.value || c.joinedSchool === true))
 const eligibleDefinitions = computed(() => definitions.value.filter(d => d.sport_id === selectedCompetition.value?.sport_id))
 const selectedEvents = computed(() => events.value.filter(e => e.competition_id === selected.value))
@@ -76,7 +81,7 @@ async function load() {
     const [sp,defs,owned,joined]=await Promise.all([
       db.from('sports').select('id,name').order('name'),
       db.from('event_definitions').select('id,sport_id,name,measurement').order('name'),
-      db.from('competitions').select('id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id,registration_opens_at,registration_closes_at,age_cutoff_mode,age_cutoff_date').order('created_at',{ascending:false}).limit(1000),
+      db.from('competitions').select('id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id,registration_opens_at,registration_closes_at,age_cutoff_mode,age_cutoff_date,max_events_per_student').order('created_at',{ascending:false}).limit(1000),
       db.from('competition_schools').select('competition_id,competitions(id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id)').eq('school_id',schoolId.value).limit(200)
     ])
     const failure=[sp,defs,owned,joined].find(x=>x.error)?.error
@@ -94,10 +99,11 @@ async function load() {
 async function loadEvents() {
   events.value=[]
   if(!selected.value)return
-  const r=await db.from('competition_events').select('id,competition_id,event_definition_id,age_group,division,is_team,min_age,max_age').eq('competition_id',selected.value).limit(500)
+  const r=await db.from('competition_events').select('id,competition_id,event_definition_id,age_group,division,is_team,min_age,max_age,max_participants').eq('competition_id',selected.value).limit(500)
   if(r.error) throw r.error
   events.value=r.data||[]
   ageEdit.value=Object.fromEntries(events.value.map((e:any)=>[e.id,{min:e.min_age==null?'':String(e.min_age),max:e.max_age==null?'':String(e.max_age)}]))
+  capacityEdit.value=Object.fromEntries(events.value.map((e:any)=>[e.id,e.max_participants==null?'':String(e.max_participants)]))
 }
 watch(showAllCompetitions,()=>{if(!visibleCompetitions.value.some(c=>c.id===selected.value))selected.value=visibleCompetitions.value[0]?.id||''})
 watch(()=>route.query.school,()=>load())
@@ -167,6 +173,22 @@ function updateCompetition(){
 function addEvent(){
   if(!canEditSelected.value||!selected.value)return
   perform(()=>db.rpc('school_add_competition_event',{p_school:schoolId.value,p_comp:selected.value,p_definition:eventForm.value.event_definition_id,p_age:eventForm.value.age_group||null,p_division:eventForm.value.division||null,p_team:eventForm.value.is_team}),'Event added.')
+}
+async function saveCompetitionLimit(){
+ if(!canEditSelected.value||limitSaving.value)return
+ const raw=competitionLimit.value.trim(), n=raw===''?null:Number(raw)
+ if(n!==null&&(!Number.isInteger(n)||n<1||n>100)){error.value='Enter a whole number between 1 and 100, or leave blank for unlimited.';return}
+ limitSaving.value=true;error.value='';notice.value=''
+ try{const {error:e}=await db.rpc('school_set_competition_entry_limit',{p_school:schoolId.value,p_comp:selected.value,p_limit:n});if(e)throw e;notice.value='Competition entry limit saved.';await load()}
+ catch(e:any){error.value=e.message||'Unable to save limit'}finally{limitSaving.value=false}
+}
+async function saveEventCapacity(ev:any){
+ if(!canEditSelected.value||capacitySaving.value)return
+ const raw=(capacityEdit.value[ev.id]||'').trim(),n=raw===''?null:Number(raw)
+ if(n!==null&&(!Number.isInteger(n)||n<1||n>10000)){error.value='Enter a whole number between 1 and 10000, or leave blank for unlimited.';return}
+ capacitySaving.value=ev.id;error.value='';notice.value=''
+ try{const {error:e}=await db.rpc('school_set_event_capacity',{p_school:schoolId.value,p_event:ev.id,p_capacity:n});if(e)throw e;notice.value='Event capacity saved.';await load()}
+ catch(e:any){error.value=e.message||'Unable to save event capacity'}finally{capacitySaving.value=''}
 }
 async function saveEventAge(ev:any){
   if(!canEditSelected.value || ageSaving.value)return
@@ -255,6 +277,15 @@ onMounted(load)
           <p class="notice">This sets the competition-wide rule. Student-facing filtering and server-side entry validation will use this cutoff in the registration phase.</p>
         </div>
         <div class="card" style="margin-bottom:1rem">
+          <h2>Student Registration Limits</h2>
+          <p class="notice">Limit how many individual events a student can enter in this competition. Leave blank for unlimited. Existing registrations are not deleted if you lower a limit.</p>
+          <form v-if="canEditSelected" class="form-grid" @submit.prevent="saveCompetitionLimit">
+            <label class="field"><span>Maximum individual events per student</span><input v-model="competitionLimit" type="number" min="1" max="100" placeholder="Unlimited" /></label>
+            <button class="btn primary" type="submit" :disabled="limitSaving">{{limitSaving?'Saving…':'Save Entry Limit'}}</button>
+          </form>
+          <p v-else>Maximum events: {{selectedCompetition.max_events_per_student??'Unlimited'}}</p>
+        </div>
+        <div class="card" style="margin-bottom:1rem">
           <h2>Competition Setup Checklist</h2>
           <p><strong>{{ registrationReadiness.label }}</strong></p>
           <ul v-if="registrationReadiness.items.length">
@@ -273,6 +304,11 @@ onMounted(load)
                 <button class="btn" :disabled="!!ageSaving" @click="saveEventAge(ev)">{{ageSaving===ev.id?'Saving…':'Save ages'}}</button>
               </div>
               <small v-else>Eligible ages: {{ev.min_age??'Any'}}–{{ev.max_age??'Any'}}</small>
+              <div v-if="canEditSelected && !ev.is_team" style="display:flex;gap:.5rem;align-items:end;flex-wrap:wrap;margin-top:.5rem">
+                <label class="field"><span>Maximum participants</span><input v-model="capacityEdit[ev.id]" type="number" min="1" max="10000" placeholder="Unlimited" style="max-width:9rem" /></label>
+                <button class="btn" :disabled="!!capacitySaving" @click="saveEventCapacity(ev)">{{capacitySaving===ev.id?'Saving…':'Save Capacity'}}</button>
+              </div>
+              <small v-else-if="!ev.is_team">Capacity: {{ev.max_participants??'Unlimited'}}</small>
             </div>
             <button v-if="canEdit && selectedCompetition.organiser_school_id===schoolId && selectedCompetition.competition_type==='intra_school'" class="btn" type="button" :disabled="saving" @click="removeEvent(ev.id)">Remove</button>
           </div>
