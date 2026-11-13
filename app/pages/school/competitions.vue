@@ -13,24 +13,22 @@ const windowForm = ref({opens:'',closes:''})
 const windowSaving = ref(false)
 const cutoffForm = ref({mode:'calendar_year',custom:''})
 const cutoffSaving = ref(false)
-const eventForm = ref({event_definition_id:'',age_group:'',division:'',is_team:false})
-const ageEdit = ref<Record<string,{min:string,max:string}>>({})
-const ageSaving = ref('')
-const capacityEdit=ref<Record<string,string>>({})
-const capacitySaving=ref('')
-const raceEdit=ref<Record<string,{lanes:string,heats:string,qualification:string}>>({})
-const raceSaving=ref('')
+const emptyEvent = () => ({event_definition_id:'',age_group:'',division:'',is_team:false,kind:'race',min_age:'',max_age:'',lanes:'8',heats:'3',qualification:'positions_plus_times',capacity:''})
+const eventForm = ref(emptyEvent())
+const newEventCapacity = computed(() => Number(eventForm.value.lanes)*Number(eventForm.value.heats))
+const editingEvent = ref<any>(null)
 const competitionLimit=ref('')
 const limitSaving=ref(false)
 
 const actionModal = ref(false)
 const actionKind = ref('')
+function closeEventModal(){editingEvent.value=null;eventForm.value=emptyEvent();dismissAction()}
 function dismissAction(){
   actionModal.value=false
   if(typeof route.query.action==='string')navigateTo({path:route.path,query:{...route.query,action:undefined},replace:true})
 }
 watch(()=>route.query.action,(action)=>{
-  if(typeof action==='string' && ['add','event'].includes(action)){actionKind.value=action;actionModal.value=true}
+  if(typeof action==='string' && ['add','event'].includes(action)){if(action==='event'){editingEvent.value=null;eventForm.value=emptyEvent()}actionKind.value=action;actionModal.value=true}
 },{immediate:true})
 const selectedCompetition = computed(() => competitions.value.find(c => c.id === selected.value))
 watch(selectedCompetition,(c)=>{competitionLimit.value=c?.max_events_per_student==null?'':String(c.max_events_per_student)},{immediate:true})
@@ -104,9 +102,6 @@ async function loadEvents() {
   const r=await db.from('competition_events').select('id,competition_id,event_definition_id,age_group,division,is_team,min_age,max_age,max_participants,race_lanes,race_max_heats,race_qualification').eq('competition_id',selected.value).limit(500)
   if(r.error) throw r.error
   events.value=r.data||[]
-  ageEdit.value=Object.fromEntries(events.value.map((e:any)=>[e.id,{min:e.min_age==null?'':String(e.min_age),max:e.max_age==null?'':String(e.max_age)}]))
-  capacityEdit.value=Object.fromEntries(events.value.map((e:any)=>[e.id,e.max_participants==null?'':String(e.max_participants)]))
-  raceEdit.value=Object.fromEntries(events.value.map((e:any)=>[e.id,{lanes:e.race_lanes==null?'':String(e.race_lanes),heats:e.race_max_heats==null?'':String(e.race_max_heats),qualification:e.race_qualification||'positions_plus_times'}]))
 }
 watch(showAllCompetitions,()=>{if(!visibleCompetitions.value.some(c=>c.id===selected.value))selected.value=visibleCompetitions.value[0]?.id||''})
 watch(()=>route.query.school,()=>load())
@@ -117,7 +112,7 @@ watch(selected,async()=>{
     windowForm.value={opens:toLocalInput(c.registration_opens_at),closes:toLocalInput(c.registration_closes_at)}
     cutoffForm.value={mode:c.age_cutoff_mode||'calendar_year',custom:c.age_cutoff_date||''}
   }
-  eventForm.value={event_definition_id:'',age_group:'',division:'',is_team:false}
+  eventForm.value=emptyEvent()
   if(!loading.value) {try {await loadEvents()}catch(e:any){error.value=e.message}}
 })
 function toLocalInput(value:string|null|undefined) {
@@ -173,9 +168,36 @@ function updateCompetition(){
   if(!canEditSelected.value||!selected.value)return
   perform(()=>db.rpc('school_update_competition',{p_school:schoolId.value,p_comp:selected.value,p_name:editForm.value.name,p_date:editForm.value.starts_on||null,p_status:editForm.value.status}),'Competition updated.')
 }
-function addEvent(){
-  if(!canEditSelected.value||!selected.value)return
-  perform(()=>db.rpc('school_add_competition_event',{p_school:schoolId.value,p_comp:selected.value,p_definition:eventForm.value.event_definition_id,p_age:eventForm.value.age_group||null,p_division:eventForm.value.division||null,p_team:eventForm.value.is_team}),'Event added.')
+function editEvent(ev:any){
+ editingEvent.value=ev
+ eventForm.value={event_definition_id:ev.event_definition_id,age_group:ev.age_group||'',division:ev.division||'',is_team:ev.is_team,
+ kind:ev.race_lanes?'race':'field',min_age:ev.min_age==null?'':String(ev.min_age),max_age:ev.max_age==null?'':String(ev.max_age),
+ lanes:String(ev.race_lanes||8),heats:String(ev.race_max_heats||3),qualification:ev.race_qualification||'positions_plus_times',capacity:ev.max_participants==null?'':String(ev.max_participants)}
+ actionKind.value='event';actionModal.value=true
+}
+async function addEvent(){
+ if(!canEditSelected.value||!selected.value||saving.value)return
+ const v=eventForm.value
+ const min=v.min_age===''?null:Number(v.min_age),max=v.max_age===''?null:Number(v.max_age)
+ const lanes=Number(v.lanes),heats=Number(v.heats),capacity=v.capacity===''?null:Number(v.capacity)
+ if(!v.event_definition_id){error.value='Choose an event.';return}
+ if(v.kind==='race' && v.is_team){error.value='Individual races cannot be team events.';return}
+ if((min!==null&&(!Number.isInteger(min)||min<3||min>30))||(max!==null&&(!Number.isInteger(max)||max<3||max>30))||(min!==null&&max!==null&&min>max)){error.value='Check minimum and maximum ages.';return}
+ if(v.kind==='race'&&(!Number.isInteger(lanes)||lanes<1||lanes>20||!Number.isInteger(heats)||heats<1||heats>30)){error.value='Enter 1–20 lanes and 1–30 heats.';return}
+ if(v.kind==='field'&&capacity!==null&&(!Number.isInteger(capacity)||capacity<1||capacity>10000)){error.value='Invalid participant limit.';return}
+ saving.value=true;error.value='';notice.value=''
+ try{
+  const {error:e}=await db.rpc('school_save_configured_competition_event',{
+   p_school:schoolId.value,p_comp:selected.value,p_event:editingEvent.value?.id||null,p_definition:v.event_definition_id,
+   p_age:v.age_group||null,p_division:v.division||null,p_team:v.is_team,p_min_age:min,p_max_age:max,
+   p_kind:v.kind,p_lanes:v.kind==='race'?lanes:null,p_max_heats:v.kind==='race'?heats:null,
+   p_qualification:v.kind==='race'?v.qualification:null,p_capacity:v.kind==='field'?capacity:null
+  })
+  if(e)throw e
+  notice.value=editingEvent.value?'Event updated.':'Event and configuration saved.'
+  editingEvent.value=null;eventForm.value=emptyEvent();dismissAction();await loadEvents()
+ }catch(e:any){error.value=e.message||'Unable to save event'}
+ finally{saving.value=false}
 }
 async function saveCompetitionLimit(){
  if(!canEditSelected.value||limitSaving.value)return
@@ -184,43 +206,6 @@ async function saveCompetitionLimit(){
  limitSaving.value=true;error.value='';notice.value=''
  try{const {error:e}=await db.rpc('school_set_competition_entry_limit',{p_school:schoolId.value,p_comp:selected.value,p_limit:n});if(e)throw e;notice.value='Competition entry limit saved.';await load()}
  catch(e:any){error.value=e.message||'Unable to save limit'}finally{limitSaving.value=false}
-}
-async function saveRaceSettings(ev:any){
- if(!canEditSelected.value||raceSaving.value)return
- const v=raceEdit.value[ev.id]
- const lanes=Number(v?.lanes),heats=Number(v?.heats)
- if(!Number.isInteger(lanes)||lanes<1||lanes>20||!Number.isInteger(heats)||heats<1||heats>30){error.value='Enter 1–20 lanes and 1–30 maximum heats.';return}
- raceSaving.value=ev.id;error.value='';notice.value=''
- try{
-  const {error:e}=await db.rpc('school_set_race_settings',{p_school:schoolId.value,p_event:ev.id,p_lanes:lanes,p_max_heats:heats,p_qualification:v.qualification})
-  if(e)throw e
-  notice.value=`Race configured: ${lanes} lanes × ${heats} heats = ${lanes*heats} places.`
-  await loadEvents()
- }catch(e:any){error.value=e.message||'Could not save race settings'}finally{raceSaving.value=''}
-}
-async function saveEventCapacity(ev:any){
- if(!canEditSelected.value||capacitySaving.value)return
- const raw=(capacityEdit.value[ev.id]||'').trim(),n=raw===''?null:Number(raw)
- if(n!==null&&(!Number.isInteger(n)||n<1||n>10000)){error.value='Enter a whole number between 1 and 10000, or leave blank for unlimited.';return}
- capacitySaving.value=ev.id;error.value='';notice.value=''
- try{const {error:e}=await db.rpc('school_set_event_capacity',{p_school:schoolId.value,p_event:ev.id,p_capacity:n});if(e)throw e;notice.value='Event capacity saved.';await load()}
- catch(e:any){error.value=e.message||'Unable to save event capacity'}finally{capacitySaving.value=''}
-}
-async function saveEventAge(ev:any){
-  if(!canEditSelected.value || ageSaving.value)return
-  const v=ageEdit.value[ev.id]
-  const min=v.min===''?null:Number(v.min), max=v.max===''?null:Number(v.max)
-  if((min!==null&&(!Number.isInteger(min)||min<3||min>30))||(max!==null&&(!Number.isInteger(max)||max<3||max>30))||(min!==null&&max!==null&&min>max)){
-    error.value='Enter valid ages between 3 and 30, with minimum not exceeding maximum.';return
-  }
-  ageSaving.value=ev.id;error.value='';notice.value=''
-  try{
-    const {error:e}=await db.rpc('school_set_event_age_limits',{p_school:schoolId.value,p_event:ev.id,p_min:min,p_max:max})
-    if(e)throw e
-    notice.value='Event age eligibility saved.'
-    await loadEvents()
-  }catch(e:any){error.value=e.message||'Could not save age limits'}
-  finally{ageSaving.value=''}
 }
 function removeEvent(id:string){
   if(!canEditSelected.value||!confirm('Remove this event? This is only allowed before rounds or entries exist.'))return
@@ -314,40 +299,38 @@ onMounted(load)
           <h2>Events ({{selectedEvents.length}})</h2>
           <div v-for="ev in selectedEvents" :key="ev.id" class="data-row" style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
             <div><strong>{{definitionName(ev.event_definition_id)}}</strong><div><small>{{ev.age_group||'All ages'}} · {{ev.division||'Open'}} · {{ev.is_team?'Team':'Individual'}}</small></div>
-              <div v-if="canEditSelected && ageEdit[ev.id]" style="display:flex;gap:.5rem;align-items:end;flex-wrap:wrap;margin-top:.5rem">
-                <label class="field"><span>Minimum age</span><input v-model="ageEdit[ev.id]!.min" type="number" min="3" max="30" placeholder="Any" style="max-width:7rem" /></label>
-                <label class="field"><span>Maximum age</span><input v-model="ageEdit[ev.id]!.max" type="number" min="3" max="30" placeholder="Any" style="max-width:7rem" /></label>
-                <button class="btn" :disabled="!!ageSaving" @click="saveEventAge(ev)">{{ageSaving===ev.id?'Saving…':'Save ages'}}</button>
-              </div>
-              <small v-else>Eligible ages: {{ev.min_age??'Any'}}–{{ev.max_age??'Any'}}</small>
-              <div v-if="canEditSelected && !ev.is_team" style="display:flex;gap:.5rem;align-items:end;flex-wrap:wrap;margin-top:.5rem">
-                <div v-if="!ev.is_team" class="card" style="margin:0.6rem 0;padding:0.8rem">
-                <strong>Track race configuration</strong>
-                <div class="form-grid">
-                  <label class="field"><span>Available lanes</span><input v-model="raceEdit[ev.id].lanes" type="number" min="1" max="20" placeholder="e.g. 8" /></label>
-                  <label class="field"><span>Maximum heats</span><input v-model="raceEdit[ev.id].heats" type="number" min="1" max="30" placeholder="e.g. 3" /></label>
-                  <label class="field"><span>Final qualification</span><select v-model="raceEdit[ev.id].qualification"><option value="positions_plus_times">Heat positions + fastest remaining</option><option value="fastest_times">Fastest overall times</option><option value="positions">Heat finishing positions</option></select></label>
-                </div>
-                <p v-if="Number(raceEdit[ev.id]?.lanes)>0 && Number(raceEdit[ev.id]?.heats)>0" class="notice">Maximum entries: {{Number(raceEdit[ev.id].lanes)*Number(raceEdit[ev.id].heats)}}. Unused heats will not be generated.</p>
-                <button class="btn" :disabled="!!raceSaving" @click="saveRaceSettings(ev)">{{raceSaving===ev.id?'Saving…':'Save Race Settings'}}</button>
-              </div>
-              <label class="field"><span>Maximum participants</span><input v-model="capacityEdit[ev.id]" :disabled="!!ev.race_lanes" type="number" min="1" max="10000" placeholder="Unlimited" style="max-width:9rem" /></label>
-                <button class="btn" :disabled="!!ev.race_lanes || !!capacitySaving" @click="saveEventCapacity(ev)">{{capacitySaving===ev.id?'Saving…':'Save Capacity'}}</button>
-              </div>
-              <small v-else-if="!ev.is_team">Capacity: {{ev.max_participants??'Unlimited'}}</small>
+              <div><small>Eligible ages: {{ev.min_age??'Any'}}–{{ev.max_age??'Any'}}</small></div>
+              <div><small v-if="ev.race_lanes">Race: {{ev.race_lanes}} lanes × {{ev.race_max_heats}} heats = {{ev.max_participants}} places · {{ev.race_qualification}}</small><small v-else>Capacity: {{ev.max_participants??'Unlimited'}}</small></div>
+              <button v-if="canEditSelected" class="btn" type="button" @click="editEvent(ev)">Edit Event</button>
             </div>
             <button v-if="canEdit && selectedCompetition.organiser_school_id===schoolId && selectedCompetition.competition_type==='intra_school'" class="btn" type="button" :disabled="saving" @click="removeEvent(ev.id)">Remove</button>
           </div>
           <p v-if="!selectedEvents.length">No events configured yet.</p>
-          <AdminActionModal :open="actionModal && actionKind==='event' && canEdit && selectedCompetition.organiser_school_id===schoolId && selectedCompetition.competition_type==='intra_school'" title="Add Event" @close="dismissAction"><form class="form-grid" @submit.prevent="addEvent">
-            <h3>Add Event</h3>
+          <AdminActionModal :open="actionModal && actionKind==='event' && canEdit && selectedCompetition.organiser_school_id===schoolId && selectedCompetition.competition_type==='intra_school'"  :title="editingEvent?'Edit Event':'Add Event'" @close="closeEventModal"><form class="form-grid" @submit.prevent="addEvent">
+            <h3>{{editingEvent?'Edit Event':'Add Event'}}</h3>
             <p v-if="!eligibleDefinitions.length">No event definitions exist for this sport. A platform administrator must add them to the event catalogue.</p>
-            <label class="field"><span>Event</span><select v-model="eventForm.event_definition_id" required><option value="" disabled>Select event</option><option v-for="d in eligibleDefinitions" :key="d.id" :value="d.id">{{d.name}} ({{d.measurement}})</option></select></label>
+            <label class="field"><span>Event</span><select v-model="eventForm.event_definition_id" :disabled="!!editingEvent" required><option value="" disabled>Select event</option><option v-for="d in eligibleDefinitions" :key="d.id" :value="d.id">{{d.name}} ({{d.measurement}})</option></select></label>
             <label class="field"><span>Age group (optional)</span><input v-model="eventForm.age_group" maxlength="60" placeholder="e.g. Under 14" /></label>
             <label class="field"><span>Division (optional)</span><input v-model="eventForm.division" maxlength="60" placeholder="e.g. Girls" /></label>
-            <label><input v-model="eventForm.is_team" type="checkbox" /> Team event</label>
-            <button class="btn primary" type="submit" :disabled="saving || !eligibleDefinitions.length">Add Event</button>
-          </form></AdminActionModal>
+                         <label v-if="eventForm.kind==='field'"><input v-model="eventForm.is_team" type="checkbox" /> Team event</label>
+             <div class="form-grid">
+               <label class="field"><span>Minimum age</span><input v-model="eventForm.min_age" type="number" min="3" max="30" placeholder="Any" /></label>
+               <label class="field"><span>Maximum age</span><input v-model="eventForm.max_age" type="number" min="3" max="30" placeholder="Any" /></label>
+             </div>
+             <label class="field"><span>Event type</span><select v-model="eventForm.kind"><option value="race">Race (swimming / athletics)</option><option value="field">Field event / other</option></select></label>
+             <template v-if="eventForm.kind==='race'">
+               <div class="form-grid">
+                 <label class="field"><span>Available lanes</span><input v-model="eventForm.lanes" type="number" min="1" max="20" required /></label>
+                 <label class="field"><span>Maximum heats</span><input v-model="eventForm.heats" type="number" min="1" max="30" required /></label>
+                 <label class="field"><span>Final qualification</span><select v-model="eventForm.qualification"><option value="positions_plus_times">Heat positions + fastest remaining</option><option value="fastest_times">Fastest overall times</option><option value="positions">Heat finishing positions</option></select></label>
+               </div>
+               <p class="notice">Calculated capacity: <strong>{{newEventCapacity}}</strong> students. Unused heats are omitted on race day.</p>
+             </template>
+             <template v-else>
+               <label class="field"><span>Maximum participants</span><input v-model="eventForm.capacity" type="number" min="1" max="10000" placeholder="Unlimited" /></label>
+             </template>
+             <button class="btn primary" type="submit" :disabled="saving || !eligibleDefinitions.length">{{saving?'Saving…':editingEvent?'Save Event Changes':'Add Event to Competition'}}</button>
+</form></AdminActionModal>
         </div>
       </template>
     </template>
