@@ -332,7 +332,7 @@ onMounted(load)
                 <button class="btn" :disabled="!!raceSaving" @click="saveRaceSettings(ev)">{{raceSaving===ev.id?'Saving…':'Save Race Settings'}}</button>
               </div>
               <label class="field"><span>Maximum participants</span><input v-model="capacityEdit[ev.id]" :disabled="!!ev.race_lanes" type="number" min="1" max="10000" placeholder="Unlimited" style="max-width:9rem" /></label>
-                <button class="btn" :disabled="!!capacitySaving" @click="saveEventCapacity(ev)" :disabled="!!ev.race_lanes || !!capacitySaving">{{capacitySaving===ev.id?'Saving…':'Save Capacity'}}</button>
+                <button class="btn" :disabled="!!ev.race_lanes || !!capacitySaving" @click="saveEventCapacity(ev)">{{capacitySaving===ev.id?'Saving…':'Save Capacity'}}</button>
               </div>
               <small v-else-if="!ev.is_team">Capacity: {{ev.max_participants??'Unlimited'}}</small>
             </div>
