@@ -2,7 +2,45 @@
 type EventRow={event_id:string;event_name:string;competition_name:string;age_group:string|null;division:string|null;starts_on:string|null;registered:boolean;registration_open:boolean}
 const email=ref(''),code=ref(''),session=ref(''),competitionId=ref(''),competitions=ref<{id:string;name:string;starts_on:string|null}[]>([]),step=ref<'email'|'code'|'events'>('email')
 const busy=ref(false),error=ref(''),notice=ref(''),events=ref<EventRow[]>([]),saving=ref('')
-onMounted(async()=>{try{competitions.value=await $fetch('/api/public-registration/competitions')}catch(e:any){error.value=e?.data?.statusMessage||'Unable to load competitions'}})
+const STORAGE_KEY='sst-student-registration-session-v1'
+const expiresAt=ref(0)
+const remaining=ref(0)
+const remainingText=computed(()=>{const seconds=Math.ceil(remaining.value/1000);return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`})
+function clearSession(){
+ if(import.meta.client)sessionStorage.removeItem(STORAGE_KEY)
+ session.value='';expiresAt.value=0;remaining.value=0;events.value=[]
+}
+function expireSession(){clearSession();step.value='email';code.value='';notice.value='Your 30-minute session has expired. Please verify your email again.'}
+function updateExpiry(){
+ if(!session.value)return
+ remaining.value=Math.max(0,expiresAt.value-Date.now())
+ if(remaining.value===0)expireSession()
+}
+async function restoreSession(){
+ if(!import.meta.client)return
+ const stored=sessionStorage.getItem(STORAGE_KEY)
+ if(!stored)return
+ try{
+  const saved=JSON.parse(stored)
+  if(typeof saved.token!=='string'||!/^[a-f0-9]{64}$/.test(saved.token)||typeof saved.competitionId!=='string'||typeof saved.expiresAt!=='number'||saved.expiresAt<=Date.now()){
+   sessionStorage.removeItem(STORAGE_KEY);return
+  }
+  session.value=saved.token;competitionId.value=saved.competitionId;expiresAt.value=saved.expiresAt
+  updateExpiry()
+  if(!session.value)return
+  await load()
+  if(session.value)step.value='events'
+ }catch{clearSession();step.value='email'}
+}
+
+let expiryInterval:ReturnType<typeof setInterval>|undefined
+onMounted(async()=>{
+ expiryInterval=setInterval(updateExpiry,1000)
+ await restoreSession()
+ try{competitions.value=await $fetch('/api/public-registration/competitions')}
+ catch(e:any){if(!session.value)error.value=e?.data?.statusMessage||'Unable to load competitions'}
+})
+onUnmounted(()=>{if(expiryInterval)clearInterval(expiryInterval)})
 const grouped=computed(()=>Object.entries(events.value.reduce((acc:Record<string,EventRow[]>,e)=>{(acc[e.competition_name] ||= []).push(e);return acc},{} as Record<string,EventRow[]>)))
 async function requestCode(){
  busy.value=true;error.value='';notice.value=''
@@ -14,13 +52,21 @@ async function requestCode(){
 async function verify(){
  busy.value=true;error.value=''
  try{const result=await $fetch<{session:string}>('/api/public-registration/verify',{method:'POST',body:{email:email.value,code:code.value,competitionId:competitionId.value}})
- session.value=result.session;step.value='events';await load()}
+ session.value=result.session
+ expiresAt.value=Date.now()+30*60*1000
+ remaining.value=30*60*1000
+ if(import.meta.client)sessionStorage.setItem(STORAGE_KEY,JSON.stringify({token:result.session,competitionId:competitionId.value,expiresAt:expiresAt.value}))
+ step.value='events';await load()}
  catch(e:any){error.value=e?.data?.statusMessage||e?.message||'Verification failed'}
  finally{busy.value=false}
 }
 async function load(){
  try{events.value=await $fetch<EventRow[]>('/api/public-registration/events',{query:{competitionId:competitionId.value},headers:{Authorization:`Bearer ${session.value}`}})}
- catch(e:any){error.value=e?.data?.statusMessage||e?.message||'Unable to load events'}
+ catch(e:any){
+  const status=e?.statusCode||e?.response?.status||e?.data?.statusCode
+  if(status===401||status===403||/expired|verification/i.test(e?.data?.statusMessage||''))expireSession()
+  else error.value=e?.data?.statusMessage||e?.message||'Unable to load events'
+ }
 }
 async function toggle(e:EventRow){
  saving.value=e.event_id;error.value='';notice.value=''
@@ -31,7 +77,7 @@ async function toggle(e:EventRow){
  }catch(x:any){error.value=x?.data?.statusMessage||x?.message||'Unable to save registration'}
  finally{saving.value=''}
 }
-function restart(){session.value='';code.value='';events.value=[];step.value='email';error.value='';notice.value=''}
+function restart(){clearSession();code.value='';step.value='email';error.value='';notice.value=''}
 </script>
 <template>
  <div class="page"><div class="shell admin-section" style="max-width:860px;margin:2rem auto">
@@ -55,7 +101,7 @@ function restart(){session.value='';code.value='';events.value=[];step.value='em
    </form>
    <template v-else>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap"><h2>My Events</h2><button class="secondary" @click="restart">Finish / use another email</button></div>
-    <p>Only events matching your school, year level and sporting-age eligibility are displayed. Your verification expires after 30 minutes.</p>
+    <p>Only events matching your school, year level and sporting-age eligibility are displayed. Session time remaining: <strong>{{remainingText}}</strong>. Refreshing this tab won't sign you out.</p>
     <p v-if="!events.length" class="notice">No eligible individual events are currently available. Ask your school to check registration dates, age eligibility and your imported student details.</p>
     <section v-for="[competition,items] in grouped" :key="competition" class="card" style="margin-top:1rem;padding:1rem">
      <h3>{{competition}}</h3>
