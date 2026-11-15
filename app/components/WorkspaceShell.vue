@@ -138,43 +138,36 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
         <img src="/logo.png" alt="School Sports Tracker" />
         <span><strong>School Sports Tracker</strong><small>COMPETE · ACHIEVE · INSPIRE</small></span>
       </NuxtLink>
-      <div class="role">{{ roleLabel }}</div>
+      <div class="role">{{ roleLabel }}</div><div class="nav-section-label">WORKSPACE</div>
       <label v-if="schoolOptions.length>0 && (platformAdmin || schoolOptions.length>1)" class="school-select">School
         <select v-model="activeSchool"><option v-for="s in schoolOptions" :key="s.id" :value="s.id">{{ s.name }}</option></select>
       </label>
       <nav class="nav" aria-label="Administration navigation">
         <NuxtLink :to="platformAdmin ? '/dashboard' : '/dashboard?school='+encodeURIComponent(activeSchool)" class="item" :class="{'current':route.path==='/dashboard'}" @click="mobileOpen=false"><span>▦</span> Dashboard</NuxtLink>
         <template v-for="item in links" :key="item.to">
-          <div v-if="flyoutSections.includes(item.label)" class="student-menu-anchor">
-            <button type="button" class="item student-menu-trigger" :class="{'current':selected(item.to)}" :aria-expanded="openFlyout===item.label" @click="toggleFlyout(item.label,$event)">
-              <span>{{item.icon}}</span>{{item.label}}<span class="menu-chevron">{{openFlyout===item.label?'‹':'›'}}</span>
-            </button>
-            <div v-if="openFlyout===item.label" class="student-flyout" :style="{'--flyout-top':flyoutTop+'px'}" :aria-label="item.label+' actions'">
-              <div class="flyout-heading">{{item.label}}</div>
-              <button v-for="option in submenuItems[item.label as keyof typeof submenuItems]" :key="option.action" type="button" class="flyout-item" @click="chooseFlyout(item,option.action)">{{option.label}}</button>
-            </div>
-          </div>
-          <NuxtLink v-else :to="item.to" class="item" :class="{'current':selected(item.to)}" @click="mobileOpen=false;openFlyout=null"><span>{{item.icon}}</span>{{item.label}}</NuxtLink>
+          <NuxtLink :to="item.to" class="item" :class="{'current':selected(item.to)}" @click="mobileOpen=false">
+            <span class="nav-icon" aria-hidden="true">{{item.icon}}</span><span>{{item.label}}</span>
+          </NuxtLink>
         </template>
       </nav>
-      <button class="logout" type="button" @click="signOut">Sign Out</button>
+      <div class="side-footer"><span class="side-footer-school">{{ schoolName }}</span><button class="logout" type="button" @click="signOut">Sign Out ↗</button></div>
     </aside>
     <div class="content">
-      <header class="top"><button class="toggle" type="button" aria-label="Toggle navigation" @click="mobileOpen=!mobileOpen; desktopCollapsed=!desktopCollapsed">☰</button><strong>{{ platformAdmin ? 'Platform Administration' : schoolName }}</strong></header>
+      <header class="top"><button class="toggle" type="button" aria-label="Toggle navigation" @click="mobileOpen=!mobileOpen; desktopCollapsed=!desktopCollapsed">☰</button><div class="top-context"><small>SCHOOL SPORTS TRACKER / WORKSPACE</small><strong>{{ platformAdmin ? 'Platform Administration' : schoolName }}</strong></div><span class="top-role">{{ roleLabel }}</span></header>
       <main class="page"><slot /></main>
     </div>
   </div>
 </template>
 <style scoped>
-.workspace{display:flex;min-height:100vh;background:#07172c;color:#f4f8ff}
-.side{position:sticky;top:0;width:260px;min-width:260px;height:100vh;background:#0d2342;border-right:1px solid #25486e;display:flex;flex-direction:column;z-index:30}
-.brand{display:flex;align-items:center;gap:12px;padding:18px 12px;border-bottom:1px solid #25486e;color:white;text-decoration:none}.brand img{height:45px;width:45px;object-fit:contain}.brand strong{display:block;font-size:14px}.brand small{display:block;font-size:9px;color:#afc5e0;letter-spacing:.7px}
-.role{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#9eb6d5;padding:20px 18px 10px}
-.school-select{padding:0 14px 12px;color:#c7d9ef;font-size:12px}.school-select select{display:block;width:100%;margin-top:5px;background:#102b4c;color:white;border:1px solid #4b729b;border-radius:6px;padding:8px}
-.nav{display:flex;flex-direction:column;gap:4px;padding:0 10px;overflow-y:auto;flex:1}.item{display:flex;align-items:center;gap:12px;padding:11px 12px;color:#d4e4f9;text-decoration:none;border-radius:8px;font-size:14px}.item span{min-width:22px;text-align:center}.item:hover{background:#173a66}.current{background:#175da5;color:white;font-weight:700}
-.student-menu-anchor{position:relative}.student-menu-trigger{width:100%;background:transparent;border:0;text-align:left;font-family:inherit;cursor:pointer}.menu-chevron{margin-left:auto!important;min-width:12px!important}.student-flyout{position:fixed;top:var(--flyout-top);left:260px;width:224px;background:#102b4c;border:1px solid #355c84;border-radius:0 12px 12px 0;box-shadow:0 14px 35px #0008;padding:12px;z-index:70}.flyout-heading{color:#a9c9ed;font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin:4px 8px 10px}.flyout-item{display:block;width:100%;padding:12px 10px;border:0;border-radius:7px;text-align:left;background:transparent;color:white;font:inherit;font-size:14px;text-decoration:none;cursor:pointer}.flyout-item:hover,.flyout-item:focus-visible{background:#175da5}.logout{margin:12px;padding:12px;background:#142f52;color:white;border:1px solid #355679;border-radius:8px;cursor:pointer}
-.content{flex:1;min-width:0}.top{min-height:70px;display:flex;align-items:center;gap:14px;padding:0 26px;background:#0a1e38;border-bottom:1px solid #25486e}.page{padding:24px 28px;max-width:100%;overflow-x:auto}
-.toggle{display:block;background:none;border:0;color:white;font-size:26px;cursor:pointer}.shade{display:none}
-@media(min-width:801px){.side.collapsed .student-flyout{display:none}.side.collapsed{width:0;min-width:0;overflow:hidden;border-right:0}.content{min-width:0}}
-@media(max-width:800px){.student-flyout{position:static;width:auto;margin:4px 0 8px 12px;border-radius:9px}.side.collapsed{width:260px;min-width:260px;overflow:visible}.side{position:fixed;left:0;transform:translateX(-100%);transition:transform .2s}.side.open{transform:translateX(0)}.shade{display:block;position:fixed;inset:0;background:#0009;z-index:29}.toggle{display:block}.top{padding:0 16px}.page{padding:18px 12px}}
+.workspace{display:flex;min-height:100vh;background:#071426;color:#edf5ff;font-family:Inter,ui-sans-serif,system-ui,sans-serif}
+.side{position:sticky;top:0;width:266px;min-width:266px;height:100vh;background:linear-gradient(180deg,#102a4b 0%,#0b1c36 100%);border-right:1px solid #284365;display:flex;flex-direction:column;z-index:30;box-shadow:8px 0 32px #020b1922}
+.brand{display:flex;align-items:center;gap:12px;padding:25px 19px 23px;border-bottom:1px solid #294669;color:white;text-decoration:none}
+.brand img{height:49px;width:49px;object-fit:contain}.brand strong{display:block;font-size:15px;line-height:1.25}.brand small{display:block;margin-top:5px;font-size:9px;color:#9fbfe5;letter-spacing:1px}
+.role{font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#94b7e2;padding:20px 19px 10px}.nav-section-label{padding:20px 20px 9px;font-size:10px;letter-spacing:1.6px;color:#6e95c4;font-weight:750}
+.school-select{padding:0 16px 8px;color:#bed3ef;font-size:12px}.school-select select{display:block;width:100%;margin-top:8px;background:#132e52;color:white;border:1px solid #395b83;border-radius:10px;padding:10px}
+.nav{display:flex;flex-direction:column;gap:5px;padding:0 12px 18px;overflow-y:auto;flex:1}.item{display:flex;align-items:center;gap:13px;padding:13px 14px;color:#c8d9ef;text-decoration:none;border-radius:11px;font-size:13px;font-weight:570;transition:background .15s,color .15s}.nav-icon{width:24px;text-align:center;font-size:17px;flex-shrink:0}.item:hover{background:#1c3d66;color:white}.current{background:linear-gradient(90deg,#2168ba,#174781);color:#fff;font-weight:750;box-shadow:0 4px 14px #0002}
+.side-footer{border-top:1px solid #284365;padding:14px 12px}.side-footer-school{display:block;font-size:11px;color:#95b6dd;padding:4px 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.logout{width:100%;padding:12px;background:#193657;color:#e3f0ff;border:1px solid #34577e;border-radius:10px;cursor:pointer;text-align:left}
+.content{flex:1;min-width:0}.top{min-height:82px;display:flex;align-items:center;gap:17px;padding:12px 34px;background:#0b1d35;border-bottom:1px solid #294263}.top-context{display:flex;flex-direction:column;gap:4px}.top-context small{font-size:10px;letter-spacing:1.5px;color:#81a8d5}.top-context strong{font-size:17px}.top-role{margin-left:auto;background:#1a3556;border:1px solid #355579;border-radius:999px;padding:9px 14px;font-size:12px;color:#c8dcf7}.page{padding:28px 34px;max-width:100%;overflow-x:auto}.toggle{background:none;border:0;color:white;font-size:24px;cursor:pointer}.shade{display:none}
+@media(min-width:801px){.side.collapsed{width:0;min-width:0;overflow:hidden;border-right:0}}
+@media(max-width:800px){.side{position:fixed;left:0;transform:translateX(-100%);transition:transform .2s}.side.open{transform:translateX(0)}.shade{display:block;position:fixed;inset:0;background:#0009;z-index:29}.top{padding:12px 16px;min-height:72px}.top-role{display:none}.page{padding:18px 12px}}
 </style>

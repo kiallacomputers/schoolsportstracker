@@ -216,8 +216,8 @@ onMounted(load)
 <template>
   <div class="page"><div class="shell admin-section">
     <NuxtLink to="/school/dashboard">← School Dashboard</NuxtLink>
-    <h1>{{schoolName}} — Sports & Events</h1>
-    <p class="notice">Manage competitions, events, registrations and Event Day in one place.</p>
+    <div class="competition-titlebar"><div><p class="workspace-kicker">COMPETITION WORKSPACE</p><h1>{{schoolName}} — Competitions</h1><p class="workspace-description">Manage your events, registrations, Event Day and results from one workspace.</p></div></div>
+    
     <p v-if="loading">Loading competitions…</p>
     <p v-if="error" class="error" role="alert">{{error}}</p>
     <p v-if="notice" class="notice" role="status">{{notice}}</p>
@@ -303,13 +303,13 @@ onMounted(load)
           <p v-else>Event definitions, registration dates and competition status are configured.</p>
           <p class="notice">This checklist checks configuration only. Student self-registration and server-side registration enforcement will be built in Phase 4D.</p>
         </div>
-        <div id="competition-events" class="card">
+        <div id="competition-events" class="card events-workspace">
           <h2>Events ({{selectedEvents.length}})</h2>
-          <div v-for="ev in selectedEvents" :key="ev.id" class="data-row" style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
-            <div><strong>{{definitionName(ev.event_definition_id)}}</strong><div><small>{{ev.age_group||'All ages'}} · {{ev.division||'Open'}} · {{ev.is_team?'Team':'Individual'}}</small></div>
+          <div v-for="ev in selectedEvents" :key="ev.id" class="data-row event-tile">
+            <div class="event-tile-content"><strong>{{definitionName(ev.event_definition_id)}}</strong><div><small>{{ev.age_group||'All ages'}} · {{ev.division||'Open'}} · {{ev.is_team?'Team':'Individual'}}</small></div>
               <div><small>Eligible ages: {{ev.min_age??'Any'}}–{{ev.max_age??'Any'}}</small></div>
               <div><small v-if="ev.race_lanes">Race: {{ev.race_lanes}} lanes × {{ev.race_max_heats}} heats = {{ev.max_participants}} places · {{ev.race_qualification}}</small><small v-else>Capacity: {{ev.max_participants??'Unlimited'}}</small></div>
-              <NuxtLink v-if="ev.race_lanes" class="btn" :to="{path:'/school/race-day',query:{school:schoolId,competition:selected,event:ev.id}}">Event Day</NuxtLink>
+              <NuxtLink v-if="ev.race_lanes" class="btn event-primary" :to="{path:'/school/race-day',query:{school:schoolId,competition:selected,event:ev.id}}">Event Day</NuxtLink>
               <NuxtLink class="btn" :to="{path:'/school/mobile-results',query:{school:schoolId,competition:selected,event:ev.id}}">Enter Results</NuxtLink>
               <button v-if="canEditSelected" class="btn" type="button" @click="editEvent(ev)">Edit Event</button>
             </div>
@@ -348,6 +348,9 @@ onMounted(load)
 </template>
 
 <style scoped>
+.competition-titlebar{padding:9px 0 16px}.workspace-kicker{font-size:11px;letter-spacing:1.8px;color:#7db5fa;font-weight:750}.competition-titlebar h1{font-size:clamp(26px,3vw,37px);letter-spacing:-.04em;margin:9px 0}.workspace-description{color:#a6c1df;font-size:14px}.competition-tabs{position:sticky;top:0;z-index:5;box-shadow:0 8px 24px #020c1d55}.competition-hero{padding:28px!important;border-radius:17px!important}.competition-hero h2{font-size:clamp(22px,2.5vw,31px);letter-spacing:-.025em}.events-workspace{border-radius:17px!important;padding:22px!important}.event-tile{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:21px!important;margin:12px 0;background:#173657;border:1px solid #31557b;border-radius:14px;flex-wrap:wrap}.event-tile-content{flex:1;min-width:230px}.event-tile-content>strong{display:block;font-size:18px;margin-bottom:8px}.event-tile-content>div{margin-top:6px;color:#bed2eb}.event-tile .btn{display:inline-flex;align-items:center;justify-content:center;margin:8px 7px 0 0;min-height:40px;border-radius:9px}.event-primary{background:#2268ba!important;color:#fff!important;border-color:#2268ba!important}
+@media(max-width:700px){.event-tile{align-items:stretch}.event-tile-content{min-width:0;width:100%}.event-tile .btn{width:100%;margin:7px 0}.competition-titlebar h1{font-size:25px}}
+
 .competition-tabs{display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0 1.25rem;padding:.65rem;border:1px solid #31547d;border-radius:14px;background:#102846}
 .competition-tabs a{color:#e7f2ff;text-decoration:none;padding:.7rem .9rem;border-radius:9px;font-weight:650;white-space:nowrap}
 .competition-tabs a:hover,.competition-tabs a:focus-visible{background:#19549a;outline-offset:2px}

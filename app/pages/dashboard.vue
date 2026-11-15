@@ -86,31 +86,31 @@ async function signOut() { await db.auth.signOut(); await navigateTo('/login') }
 </script>
 
 <template>
-<main class="dashboard-main">
-        <div class="eyebrow">{{ isPlatformAdmin ? 'Platform Administration' : 'School Portal' }}</div>
-        <h1>{{ isPlatformAdmin ? 'Sports Dashboard' : schoolName }}</h1>
-        <p v-if="loading">Checking your account…</p>
-        <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
-        <template v-if="!loading && !errorMessage">
-          <template v-if="isPlatformAdmin">
-            <div class="summary-grid"><div class="summary-card"><h2>Schools</h2><strong>{{ schools.length }}</strong></div><div class="summary-card"><h2>Recent Competitions</h2><strong>{{ recent.length }}</strong></div></div>
-            <div class="summary-card"><h2>Schools</h2><p v-for="s in schools" :key="s.id">{{ s.name }}</p><p v-if="!schools.length">No schools yet.</p></div>
-          </template>
-          <template v-else>
-            <label v-if="schoolOptions.length > 1" class="school-picker">School <select v-model="selectedId"><option v-for="s in schoolOptions" :key="s.id" :value="s.id">{{ s.name }}</option></select></label>
-            <p class="muted">{{ isSchoolAdmin ? 'School Administrator' : 'School Staff' }} · Showing information for your assigned school.</p>
-            <div class="summary-grid"><div class="summary-card"><h2>Houses</h2><strong>{{ counts.houses }}</strong></div><div class="summary-card"><h2>Students</h2><strong>{{ counts.students }}</strong></div><div class="summary-card"><h2>School Members</h2><strong>{{ counts.staff }}</strong></div><div class="summary-card"><h2>Competitions</h2><strong>{{ counts.competitions }}</strong></div></div>
-          </template>
-          <div class="summary-card"><h2>Recent Competitions</h2><p v-for="c in recent" :key="c.id">{{ c.name }} — {{ c.status }}</p><p v-if="!recent.length">No competitions to display.</p></div>
-        </template>
-      </main>
+<main class="sst-dashboard">
+  <div class="dashboard-heading"><div><p class="eyebrow">{{ isPlatformAdmin ? 'PLATFORM OVERVIEW' : 'SCHOOL WORKSPACE' }}</p><h1>{{ isPlatformAdmin ? 'Sports Dashboard' : 'School Dashboard' }}</h1><p class="subheading">{{ isPlatformAdmin ? 'Schools and competitions across the platform' : schoolName + ' · Your competitions, students and event management in one place' }}</p></div><NuxtLink v-if="!isPlatformAdmin && selectedId" class="action-button" :to="schoolLink('competitions')">Manage Competitions →</NuxtLink></div>
+  <p v-if="loading">Loading dashboard…</p><p v-if="errorMessage" class="error" role="alert">{{errorMessage}}</p>
+  <template v-if="!loading && !errorMessage">
+    <label v-if="!isPlatformAdmin && schoolOptions.length>1" class="school-picker">School <select v-model="selectedId"><option v-for="s in schoolOptions" :key="s.id" :value="s.id">{{s.name}}</option></select></label>
+    <div class="metrics">
+      <div class="metric"><span class="metric-icon">🎓</span><span>Students</span><strong>{{isPlatformAdmin?'—':counts.students}}</strong><small>School enrolments</small></div>
+      <div class="metric"><span class="metric-icon">🏆</span><span>Competitions</span><strong>{{isPlatformAdmin?recent.length:counts.competitions}}</strong><small>Available competitions</small></div>
+      <div class="metric"><span class="metric-icon">🏠</span><span>{{isPlatformAdmin?'Schools':'Houses'}}</span><strong>{{isPlatformAdmin?schools.length:counts.houses}}</strong><small>{{isPlatformAdmin?'Registered schools':'School houses'}}</small></div>
+      <div class="metric"><span class="metric-icon">👥</span><span>School Staff</span><strong>{{isPlatformAdmin?'—':counts.staff}}</strong><small>Assigned members</small></div>
+    </div>
+    <div class="dashboard-grid">
+      <section class="panel"><div class="panel-head"><div><p class="eyebrow">YOUR WORKSPACE</p><h2>Competitions</h2></div><NuxtLink v-if="!isPlatformAdmin" :to="schoolLink('competitions')">View all →</NuxtLink></div>
+        <div v-for="c in recent" :key="c.id" class="competition-row"><span class="competition-symbol">🏊</span><div class="competition-details"><strong>{{c.name}}</strong><small>School year {{c.school_year || '—'}}</small></div><span class="status-pill">{{c.status}}</span><NuxtLink v-if="!isPlatformAdmin" class="row-action" :to="{path:'/school/competitions',query:{school:selectedId,competition:c.id}}">Open →</NuxtLink></div>
+        <p v-if="!recent.length" class="empty">No competitions to display yet.</p>
+      </section>
+      <section class="panel"><div class="panel-head"><div><p class="eyebrow">QUICK ACCESS</p><h2>Manage your school</h2></div></div>
+        <template v-if="!isPlatformAdmin"><NuxtLink class="quick-link" :to="schoolLink('competitions')">🏆 <span>Competition Workspace</span> →</NuxtLink><NuxtLink class="quick-link" :to="schoolLink('entries')">📝 <span>Event Registrations</span> →</NuxtLink><NuxtLink class="quick-link" :to="schoolLink('race-day')">🏁 <span>Event Day</span> →</NuxtLink><NuxtLink class="quick-link" :to="schoolLink('mobile-results')">📱 <span>Mobile Results Entry</span> →</NuxtLink></template>
+        <template v-else><NuxtLink v-for="link in platformLinks.slice(0,5)" :key="link.to" class="quick-link" :to="link.to">{{link.icon}} <span>{{link.label}}</span> →</NuxtLink></template>
+      </section>
+    </div>
+  </template>
+</main>
 </template>
 <style scoped>
-.dashboard-main{max-width:1300px;padding:24px 16px;margin:auto;color:#f4f8ff}
-.dashboard-main h1{font-size:30px;margin:8px 0 26px}
-.eyebrow{text-transform:uppercase;letter-spacing:1.6px;color:#81b7f6;font-size:12px}
-.muted{color:#b3c8e1}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin:22px 0}
-.summary-card{background:#102b4c;border:1px solid #2a4b71;border-radius:12px;padding:22px;margin-bottom:16px}
-.summary-card h2{font-size:15px;color:#c1d8f1;margin:0 0 12px}.summary-card strong{font-size:32px}.summary-card p{margin:8px 0}
-.school-picker{display:flex;gap:12px;align-items:center}.school-picker select{background:#102b4c;color:white;border:1px solid #4b729b;padding:8px;border-radius:6px}.error{color:#ffaaaa}
+.sst-dashboard{max-width:1480px;margin:auto;color:#edf5ff;padding:4px 0 30px;font-family:Inter,ui-sans-serif,system-ui,sans-serif}.dashboard-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:8px 0 27px}.eyebrow{font-size:10px;letter-spacing:1.7px;color:#80b7ff;font-weight:750;margin:0 0 10px}.dashboard-heading h1{font-size:clamp(27px,3vw,39px);letter-spacing:-.04em;margin:0 0 8px}.subheading{color:#9eb9d9;margin:0;font-size:14px}.action-button{background:#2774d0;color:white;text-decoration:none;padding:13px 18px;border-radius:10px;font-size:13px;font-weight:750}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:25px 0}.metric{background:linear-gradient(150deg,#142f53,#102642);border:1px solid #2b4d75;border-radius:16px;padding:21px;display:flex;flex-direction:column;gap:7px}.metric-icon{font-size:21px;margin-bottom:7px}.metric>span:not(.metric-icon){font-size:13px;color:#b7cce6}.metric strong{font-size:35px;line-height:1.15}.metric small{font-size:11px;color:#87a6c8}.dashboard-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr);gap:18px}.panel{background:#102641;border:1px solid #2b4b70;border-radius:17px;padding:24px}.panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}.panel-head h2{font-size:20px;margin:0}.panel-head a{color:#9ec8ff;text-decoration:none;font-size:13px}.competition-row{display:flex;align-items:center;gap:13px;padding:17px 0;border-top:1px solid #2a4767;flex-wrap:wrap}.competition-symbol{display:grid;place-items:center;width:42px;height:42px;background:#1b3c65;border-radius:12px;font-size:20px}.competition-details{display:flex;flex-direction:column;gap:6px;flex:1;min-width:160px}.competition-details strong{font-size:14px}.competition-details small{color:#94b1d2;font-size:12px}.status-pill{background:#1d4966;color:#b9e5f3;border-radius:99px;padding:6px 10px;text-transform:capitalize;font-size:11px}.row-action{color:#c7e1ff;text-decoration:none;font-size:13px}.quick-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#e6f1ff;border:1px solid #29496e;background:#173453;border-radius:11px;padding:16px;margin:10px 0;font-size:14px}.quick-link span{flex:1}.quick-link:hover{background:#215081}.empty{color:#a9c1dc}.school-picker{display:flex;align-items:center;gap:12px;margin-bottom:14px;color:#b8cce5}.school-picker select{background:#163658;color:white;border:1px solid #46688d;padding:9px;border-radius:9px}.error{color:#ffb5b5}
+@media(max-width:1000px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-grid{grid-template-columns:1fr}}@media(max-width:600px){.dashboard-heading{align-items:flex-start;flex-direction:column}.metrics{gap:9px}.metric{padding:15px}.metric strong{font-size:28px}.panel{padding:16px}}
 </style>
