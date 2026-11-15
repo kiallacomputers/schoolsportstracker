@@ -12,17 +12,17 @@ const canFinal=computed(()=>heatCount.value>0 && grouped.value.filter(r=>r.type=
 const edits=ref<Record<string,{time:string,status:string}>>({})
 async function load(){loading.value=true;error.value='';try{
  const {data:{user}}=await db.auth.getUser();if(!user){await navigateTo('/login');return}
- if(!school.value)throw new Error('Open Race Day from a selected school.')
+ if(!school.value)throw new Error('Open Event Day from a selected school.')
  const [m,p,c,d]=await Promise.all([
  db.from('school_memberships').select('role').eq('school_id',school.value).eq('user_id',user.id).maybeSingle(),db.rpc('is_platform_admin'),
  db.from('competitions').select('id,name,school_year').eq('organiser_school_id',school.value).eq('competition_type','intra_school').order('school_year',{ascending:false}),
  db.from('event_definitions').select('id,name')]);for(const r of [m,p,c,d])if(r.error)throw r.error
  if(!p.data&&!['school_admin','teacher'].includes(m.data?.role))throw new Error('School Administrator or Teacher access required.')
- competitions.value=c.data||[];definitions.value=d.data||[];competitionId.value=competitions.value[0]?.id||'';await loadEvents()
- }catch(e:any){error.value=e.message||'Unable to load race day'}finally{loading.value=false}}
+ competitions.value=c.data||[];definitions.value=d.data||[];competitionId.value=competitions.value.some(c=>c.id===route.query.competition)?String(route.query.competition):(competitions.value[0]?.id||'');await loadEvents()
+ }catch(e:any){error.value=e.message||'Unable to load Event Day'}finally{loading.value=false}}
 async function loadEvents(){events.value=[];rounds.value=[];if(!competitionId.value)return
  const r=await db.from('competition_events').select('id,event_definition_id,age_group,division,race_lanes,race_max_heats,race_qualification,is_team').eq('competition_id',competitionId.value).eq('is_team',false).not('race_lanes','is',null)
- if(r.error)throw r.error;events.value=r.data||[];eventId.value=events.value[0]?.id||'';await loadRounds()}
+ if(r.error)throw r.error;events.value=r.data||[];eventId.value=events.value.some(e=>e.id===route.query.event)?String(route.query.event):(events.value[0]?.id||'');await loadRounds()}
 async function loadRounds(){rounds.value=[];edits.value={};if(!eventId.value)return
  const r=await db.rpc('school_race_rounds',{p_school:school.value,p_event:eventId.value});if(r.error)throw r.error
  rounds.value=r.data||[];for(const x of rounds.value)if(x.entry_id)edits.value[`${x.round_id}:${x.entry_id}`]={time:x.time_ms==null?'':(x.time_ms/1000).toFixed(3),status:x.result_status==='pending'?'valid':x.result_status}}
@@ -39,24 +39,34 @@ onMounted(load)
 </script>
 <template><div class="page"><div class="shell admin-section">
  <NuxtLink :to="{path:'/school/dashboard',query:{school}}">← School Dashboard</NuxtLink>
- <h1>Race Day — Heats &amp; Finals</h1>
+ <h1>Event Day — Heats &amp; Finals</h1>
  <p class="notice">Generate only the heats required for registered students. Record every runner's result, complete each heat, then calculate finalists. Race generation is permanent for this version.</p>
  <p v-if="error" class="error" role="alert">{{error}}</p><p v-if="notice" class="notice" role="status">{{notice}}</p>
  <p v-if="loading">Loading…</p><template v-else>
  <div class="card"><label class="field"><span>Competition</span><select v-model="competitionId"><option v-for="c in competitions" :key="c.id" :value="c.id">{{c.name}} ({{c.school_year}})</option></select></label>
- <label class="field"><span>Configured track race</span><select v-model="eventId"><option v-for="e in events" :key="e.id" :value="e.id">{{eventLabel(e)}}</option></select></label>
+ <label class="field"><span>Race event (swimming / running)</span><select v-model="eventId"><option v-for="e in events" :key="e.id" :value="e.id">{{eventLabel(e)}}</option></select></label>
  <p v-if="chosen">{{chosen.race_lanes}} lanes × {{chosen.race_max_heats}} maximum heats · {{chosen.race_qualification}}</p>
  <button v-if="chosen&&!grouped.length" class="btn primary" :disabled="busy" @click="generate">Generate Heats / Straight Final</button>
  <button v-if="canFinal" class="btn primary" :disabled="busy" @click="generateFinal">Calculate Qualifiers &amp; Generate Final</button>
  </div>
- <div v-for="round in grouped" :key="round.id" class="card" style="margin-top:1rem">
+ <div v-for="round in grouped" :key="round.id" class="card event-round" style="margin-top:1rem">
  <h2>{{round.type==='final'?'Final':'Heat '+round.number}} — {{round.status}}</h2>
- <div v-for="r in round.runners" :key="r.entry_id" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:end;margin-bottom:.8rem">
- <span style="min-width:11rem">Lane {{r.lane_number}} — {{r.student_name}}</span>
+ <div v-for="r in round.runners" :key="r.entry_id" class="event-runner">
+ <strong class="event-runner-name">Lane {{r.lane_number}} — {{r.student_name}}</strong>
  <label class="field"><span>Time (seconds)</span><input v-model="edits[`${r.round_id}:${r.entry_id}`].time" type="number" min="0" step="0.001" :disabled="round.status==='complete'||edits[`${r.round_id}:${r.entry_id}`].status!=='valid'" /></label>
  <label class="field"><span>Result</span><select v-model="edits[`${r.round_id}:${r.entry_id}`].status" :disabled="round.status==='complete'"><option value="valid">Valid</option><option value="dns">DNS</option><option value="dnf">DNF</option><option value="dq">Disqualified</option></select></label>
  <button class="btn" :disabled="busy||round.status==='complete'" @click="save(r)">Save</button>
  </div>
  <button v-if="round.status!=='complete'" class="btn primary" :disabled="busy" @click="finalise(round)">Complete {{round.type==='final'?'Final':'Heat'}}</button>
- </div><p v-if="!chosen" class="notice">No track races configured. Configure lanes and maximum heats under Competitions first.</p>
+ </div><p v-if="!chosen" class="notice">No lane-based races configured. Configure events under Competitions first.</p>
  </template></div></div></template>
+
+<style scoped>
+.event-runner{display:grid;grid-template-columns:minmax(180px,1.3fr) minmax(120px,1fr) minmax(140px,1fr) auto;gap:.75rem;align-items:end;margin:.75rem 0;padding:1rem;background:#102846;border:1px solid #34557b;border-radius:12px}
+.event-runner-name{align-self:center}
+.event-runner .field{min-width:0}
+.event-runner input,.event-runner select{width:100%;min-height:44px;font-size:16px}
+.event-runner .btn{min-height:44px}
+@media(max-width:740px){.event-runner{grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding:.85rem}.event-runner-name{grid-column:1/-1}.event-runner .btn{grid-column:1/-1;width:100%}.event-round{padding:.8rem}}
+@media(max-width:380px){.event-runner{grid-template-columns:1fr}.event-runner-name,.event-runner .btn{grid-column:auto}}
+</style>

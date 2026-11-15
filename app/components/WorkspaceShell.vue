@@ -17,9 +17,9 @@ const submenuItems = computed(() => ({
   Students: [{label:'View Students',action:'view'}, ...(canManageSchool.value?[{label:'Add Student',action:'add'},{label:'Import Students',action:'import'}]:[])],
   Staff: [{label:'View Staff',action:'view'}, ...(canManageSchool.value?[{label:'Assign Staff',action:'assign'},{label:'Invite Staff',action:'invite'}]:[])],
   Houses: [{label:'View Houses',action:'view'}, ...(canManageSchool.value?[{label:'Add House',action:'add'}]:[])],
-  Competitions: [{label:'View Competitions',action:'view'}, ...(canManageSchool.value?[{label:'Add Competition',action:'add'},{label:'Add Event',action:'event'}]:[])],
+  Competitions: [{label:'View Competitions',action:'view'}, {label:'Event Day',action:'eventday'}, ...(canManageSchool.value?[{label:'Add Competition',action:'add'},{label:'Add Event',action:'event'}]:[])],
   'Event Registrations': [{label:'View Registrations',action:'view'}, ...(canAssign.value?[{label:'Assign Student',action:'add'}]:[])],
-  'Results & House Points': [{label:'View Results',action:'view'}, ...(canAssign.value?[{label:'Enter Result',action:'add'}]:[])]
+  'Results & House Points': [{label:'View Results',action:'view'}, {label:'Mobile Result Entry',action:'mobile'}, ...(canAssign.value?[{label:'Enter Result',action:'add'}]:[])]
 }))
 const flyoutSections = ['Students','Staff','Houses','Competitions','Event Registrations','Results & House Points']
 function toggleFlyout(label:string,event:MouseEvent){
@@ -39,6 +39,8 @@ async function chooseFlyout(item:any,action:string){
   openFlyout.value=null;mobileOpen.value=false
   const path=item.to.split('?')[0]
   if(action==='view'){await navigateTo(item.to);return}
+  if(action==='eventday'){await navigateTo({path:'/school/race-day',query:{school:activeSchool.value}});return}
+  if(action==='mobile'){await navigateTo({path:'/school/mobile-results',query:{school:activeSchool.value}});return}
   if(!activeSchool.value){
     // A platform administrator must select a school before creating school-scoped records.
     await navigateTo(item.to)
@@ -70,7 +72,8 @@ const links = computed(() => {
         {label:'Houses',to:'/school/houses'+suffix,icon:'🏠'},
         {label:'Competitions',to:'/school/competitions'+suffix,icon:'🏆'},
         {label:'Event Registrations',to:'/school/entries'+suffix,icon:'📝'},
-        {label:'Results & House Points',to:'/school/results'+suffix,icon:'🥇'}
+        {label:'Results & House Points',to:'/school/results'+suffix,icon:'🥇'},
+        {label:'Event Day',to:'/school/race-day'+suffix,icon:'🏁'}
       ] : [])
     ]
   }
@@ -83,7 +86,8 @@ const links = computed(() => {
     {label:'Houses',to:'/school/houses'+suffix,icon:'🏠'},
     {label:'Competitions',to:'/school/competitions'+suffix,icon:'🏆'},
     {label:'Event Registrations',to:'/school/entries'+suffix,icon:'📝'},
-    {label:'Results & House Points',to:'/school/results'+suffix,icon:'🥇'}
+    {label:'Results & House Points',to:'/school/results'+suffix,icon:'🥇'},
+    {label:'Event Day',to:'/school/race-day'+suffix,icon:'🏁'}
   ]
 })
 async function checkAccess() {

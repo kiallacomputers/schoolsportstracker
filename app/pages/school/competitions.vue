@@ -217,7 +217,7 @@ onMounted(load)
   <div class="page"><div class="shell admin-section">
     <NuxtLink to="/school/dashboard">← School Dashboard</NuxtLink>
     <h1>{{schoolName}} — Sports & Events</h1>
-    <p class="notice">Create and configure school competitions and their events. Results and student entries will be added in later phases.</p>
+    <p class="notice">Manage competitions, events, registrations and Event Day in one place.</p>
     <p v-if="loading">Loading competitions…</p>
     <p v-if="error" class="error" role="alert">{{error}}</p>
     <p v-if="notice" class="notice" role="status">{{notice}}</p>
@@ -238,8 +238,16 @@ onMounted(load)
         <p v-if="!visibleCompetitions.length">No competitions associated with this school yet.</p>
         <label v-else class="field"><span>Choose competition</span><select v-model="selected"><option v-for="c in visibleCompetitions" :key="c.id" :value="c.id">{{c.name}} · {{c.school_year}} · {{c.status}}</option></select></label>
       </div>
+      <nav v-if="selectedCompetition" class="competition-tabs" aria-label="Competition workspace">
+        <a href="#competition-overview">Overview</a>
+        <a href="#competition-events">Events</a>
+        <NuxtLink :to="{path:'/school/entries',query:{school:schoolId}}">Registrations</NuxtLink>
+        <NuxtLink :to="{path:'/school/race-day',query:{school:schoolId,competition:selected}}">Event Day</NuxtLink>
+        <NuxtLink :to="{path:'/school/mobile-results',query:{school:schoolId,competition:selected}}">Enter Results</NuxtLink>
+        <a href="#competition-settings">Settings</a>
+      </nav>
       <template v-if="selectedCompetition">
-        <div class="card" style="margin-bottom:1rem">
+        <div id="competition-overview" class="card competition-hero" style="margin-bottom:1rem">
           <h2>{{selectedCompetition.name}}</h2>
           <NuxtLink v-if="isSuperAdmin && selectedCompetition.organiser_school_id !== schoolId" :to="{path:'/school/competitions',query:{school:selectedCompetition.organiser_school_id}}">Open organising school to manage this competition</NuxtLink>
           <p>{{sportName(selectedCompetition.sport_id)}} · {{selectedCompetition.school_year}} · {{selectedCompetition.status}}</p>
@@ -251,7 +259,7 @@ onMounted(load)
             <button class="btn primary" type="submit" :disabled="saving">Save Changes</button>
           </form>
         </div>
-        <div class="card" style="margin-bottom:1rem">
+        <div id="competition-settings" class="card" style="margin-bottom:1rem">
           <h2>Registration Window</h2>
           <p class="notice">Configure the registration schedule. Enforcement in the registration functions is a separate step. Dates are saved in your browser's local time and stored in UTC.</p>
           <form v-if="canEditSelected" class="form-grid" @submit.prevent="saveRegistrationWindow">
@@ -295,12 +303,14 @@ onMounted(load)
           <p v-else>Event definitions, registration dates and competition status are configured.</p>
           <p class="notice">This checklist checks configuration only. Student self-registration and server-side registration enforcement will be built in Phase 4D.</p>
         </div>
-        <div class="card">
+        <div id="competition-events" class="card">
           <h2>Events ({{selectedEvents.length}})</h2>
           <div v-for="ev in selectedEvents" :key="ev.id" class="data-row" style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
             <div><strong>{{definitionName(ev.event_definition_id)}}</strong><div><small>{{ev.age_group||'All ages'}} · {{ev.division||'Open'}} · {{ev.is_team?'Team':'Individual'}}</small></div>
               <div><small>Eligible ages: {{ev.min_age??'Any'}}–{{ev.max_age??'Any'}}</small></div>
               <div><small v-if="ev.race_lanes">Race: {{ev.race_lanes}} lanes × {{ev.race_max_heats}} heats = {{ev.max_participants}} places · {{ev.race_qualification}}</small><small v-else>Capacity: {{ev.max_participants??'Unlimited'}}</small></div>
+              <NuxtLink v-if="ev.race_lanes" class="btn" :to="{path:'/school/race-day',query:{school:schoolId,competition:selected,event:ev.id}}">Event Day</NuxtLink>
+              <NuxtLink class="btn" :to="{path:'/school/mobile-results',query:{school:schoolId,competition:selected,event:ev.id}}">Enter Results</NuxtLink>
               <button v-if="canEditSelected" class="btn" type="button" @click="editEvent(ev)">Edit Event</button>
             </div>
             <button v-if="canEdit && selectedCompetition.organiser_school_id===schoolId && selectedCompetition.competition_type==='intra_school'" class="btn" type="button" :disabled="saving" @click="removeEvent(ev.id)">Remove</button>
@@ -336,3 +346,11 @@ onMounted(load)
     </template>
   </div></div>
 </template>
+
+<style scoped>
+.competition-tabs{display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0 1.25rem;padding:.65rem;border:1px solid #31547d;border-radius:14px;background:#102846}
+.competition-tabs a{color:#e7f2ff;text-decoration:none;padding:.7rem .9rem;border-radius:9px;font-weight:650;white-space:nowrap}
+.competition-tabs a:hover,.competition-tabs a:focus-visible{background:#19549a;outline-offset:2px}
+.competition-hero{background:linear-gradient(125deg,#142f57,#0c1e38);border-color:#3c6395}
+@media(max-width:700px){.competition-tabs{flex-wrap:nowrap;overflow-x:auto;scroll-snap-type:x proximity}.competition-tabs a{scroll-snap-align:start}}
+</style>
