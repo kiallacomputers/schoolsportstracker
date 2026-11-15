@@ -10,7 +10,7 @@ const selectedHouseId = computed(() => typeof route.query.house === 'string' ? r
 const selectedHouse = computed(() => houses.value.find(h => h.id === selectedHouseId.value))
 function houseStudentsUrl(houseId: string) { return { path: '/school/students', query: { school: schoolId.value, house: houseId } } }
 function clearHouseFilter() { const query = { ...route.query }; delete query.house; navigateTo({ path: route.path, query }) }
-const blank = () => ({id:'',student_number:'',given_name:'',family_name:'',email:'',date_of_birth:'',year_level:'',house_id:''})
+const blank = () => ({id:'',student_number:'',given_name:'',family_name:'',email:'',date_of_birth:'',gender_identity:'',sporting_division:'',year_level:'',house_id:''})
 const form = ref(blank()), editing = ref(false)
 const modalOpen = ref(false)
 const importModalOpen = ref(false)
@@ -68,7 +68,7 @@ async function load() {
     canEdit.value = isSuperAdmin.value || m.data?.role === 'school_admin'
     schoolName.value = (m.data?.schools as any)?.name || 'School'
     const [s,h,e] = await Promise.all([
-      db.from('students').select('id,student_number,given_name,family_name,email,date_of_birth,is_active').eq('school_id',schoolId.value).order('family_name').limit(2000),
+      db.from('students').select('id,student_number,given_name,family_name,email,date_of_birth,gender_identity,sporting_division,is_active').eq('school_id',schoolId.value).order('family_name').limit(2000),
       db.from('school_houses').select('id,name,colour').eq('school_id',schoolId.value).order('name'),
       db.from('student_enrolments').select('id,student_id,school_year,year_level,house_id').eq('school_id',schoolId.value).eq('school_year',year.value).limit(2000)
     ])
@@ -82,7 +82,7 @@ onMounted(load)
 watch([schoolId,year],load)
 function startEdit(s:any) {
   const e = enrolmentFor(s.id)
-  form.value = { ...s, email:s.email || '', date_of_birth:s.date_of_birth || '', year_level:e?.year_level || '', house_id:e?.house_id || '' }
+  form.value = { ...s, email:s.email || '', date_of_birth:s.date_of_birth || '', gender_identity:s.gender_identity || '', sporting_division:s.sporting_division || '', year_level:e?.year_level || '', house_id:e?.house_id || '' }
   editing.value = true; notice.value = ''; modalError.value = ''; confirmSave.value = false; modalOpen.value = true
 }
 function reset() { form.value = blank(); editing.value = false }
@@ -94,7 +94,7 @@ async function save() {
   if (!validEmail(f.email.trim())) { modalError.value = 'Enter a valid email address or leave it blank.'; confirmSave.value = false; return }
   saving.value = true
   try {
-    const record:any = { school_id:schoolId.value, student_number:f.student_number.trim(), given_name:f.given_name.trim(), family_name:f.family_name.trim(), email:f.email.trim().toLowerCase() || null, date_of_birth:f.date_of_birth || null }
+    const record:any = { school_id:schoolId.value, student_number:f.student_number.trim(), given_name:f.given_name.trim(), family_name:f.family_name.trim(), email:f.email.trim().toLowerCase() || null, date_of_birth:f.date_of_birth || null, gender_identity:f.gender_identity || null, sporting_division:f.sporting_division || null }
     const s = f.id
       ? await db.from('students').update(record).eq('id', f.id).eq('school_id', schoolId.value).select('id').single()
       : await db.from('students').upsert(record, {onConflict:'school_id,student_number'}).select('id').single()
@@ -168,6 +168,17 @@ async function importCsv() {
       const studentRecord:any = {school_id:schoolId.value,student_number:r.student_number,given_name:r.given_name,family_name:r.family_name,date_of_birth:r.date_of_birth||null}
       // Preserve existing emails when importing legacy CSV files without an email column.
       if (Object.prototype.hasOwnProperty.call(r, 'email')) studentRecord.email = r.email?.trim().toLowerCase() || null
+      // Only update identity/division when explicitly supplied in CSV; never erase on legacy imports.
+      if (Object.prototype.hasOwnProperty.call(r,'gender_identity')) {
+        const identity = (r.gender_identity||'').trim().toLowerCase()
+        if (identity && !['male','female','non-binary','self-describe','prefer not to say'].includes(identity)) throw new Error('Invalid gender_identity')
+        studentRecord.gender_identity = identity || null
+      }
+      if (Object.prototype.hasOwnProperty.call(r,'sporting_division')) {
+        const division = (r.sporting_division||'').trim().toLowerCase()
+        if (division && !['boys','girls','mixed'].includes(division)) throw new Error('Invalid sporting_division')
+        studentRecord.sporting_division = division || null
+      }
       const s=await db.from('students').upsert(studentRecord,{onConflict:'school_id,student_number'}).select('id').single()
       if(s.error)throw s.error
       const e=await db.from('student_enrolments').upsert({student_id:s.data.id,school_id:schoolId.value,school_year:year.value,year_level:r.year_level||null,house_id:house?.id||null},{onConflict:'student_id,school_year'})
@@ -189,10 +200,10 @@ async function importCsv() {
     <section class="student-modal card" role="dialog" aria-modal="true" aria-labelledby="student-modal-title">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem"><h2 id="student-modal-title">{{editing?'Edit Student':'Add Student'}}</h2><button type="button" class="btn" :disabled="saving" aria-label="Close" @click="closeModal">✕</button></div>
       <p v-if="modalError" class="error" role="alert">{{modalError}}</p>
-      <div class="cards"><label class="field">Student number<input v-model="form.student_number" maxlength="100" /></label><label class="field">First name<input v-model="form.given_name" maxlength="100" /></label><label class="field">Last name<input v-model="form.family_name" maxlength="100" /></label><label class="field">Email address (optional)<input v-model="form.email" type="email" autocomplete="off" maxlength="254" placeholder="student@school.edu.au" /></label><label class="field">Date of birth (optional)<input v-model="form.date_of_birth" type="date" /></label><label class="field">Year level<input v-model="form.year_level" placeholder="e.g. 9" maxlength="30" /></label><label class="field">House<select v-model="form.house_id"><option value="">Not assigned</option><option v-for="h in houses" :key="h.id" :value="h.id">{{h.name}}</option></select></label></div>
+      <div class="cards"><label class="field">Student number<input v-model="form.student_number" maxlength="100" /></label><label class="field">First name<input v-model="form.given_name" maxlength="100" /></label><label class="field">Last name<input v-model="form.family_name" maxlength="100" /></label><label class="field">Email address (optional)<input v-model="form.email" type="email" autocomplete="off" maxlength="254" placeholder="student@school.edu.au" /></label><label class="field">Date of birth (optional)<input v-model="form.date_of_birth" type="date" /></label><label class="field">Gender identity (optional)<select v-model="form.gender_identity"><option value="">Not provided</option><option value="male">Male</option><option value="female">Female</option><option value="non-binary">Non-binary</option><option value="self-describe">Self-describe</option><option value="prefer not to say">Prefer not to say</option></select></label><label class="field">Approved sporting division<select v-model="form.sporting_division"><option value="">Not assigned</option><option value="boys">Boys</option><option value="girls">Girls</option><option value="mixed">Mixed/Open only</option></select></label><label class="field">Year level<input v-model="form.year_level" placeholder="e.g. 9" maxlength="30" /></label><label class="field">House<select v-model="form.house_id"><option value="">Not assigned</option><option v-for="h in houses" :key="h.id" :value="h.id">{{h.name}}</option></select></label></div>
       <div v-if="confirmSave" class="student-confirm" role="alertdialog" aria-label="Confirm student save">
         <strong>Confirm {{editing?'changes':'new student'}}</strong>
-        <p>Are you sure you want to {{editing?'save changes to':'add'}} {{form.given_name}} {{form.family_name}} ({{form.student_number}})? This will update the school's student records for {{year}}.</p>
+        <p>Are you sure you want to {{editing?'save changes to':'add'}} {{form.given_name}} {{form.family_name}} ({{form.student_number}})? This will update the school's student records for {{year}}, including the approved sporting division.</p>
         <div style="display:flex;gap:.75rem;flex-wrap:wrap"><button class="btn" type="button" :disabled="saving" @click="save">{{saving?'Saving…':'Yes, Save Student'}}</button><button class="btn" type="button" :disabled="saving" @click="confirmSave=false">Review Details</button></div>
       </div>
       <div v-else style="display:flex;gap:.75rem;margin-top:1rem;flex-wrap:wrap"><button class="btn" type="button" :disabled="saving" @click="requestSave">{{editing?'Save Changes':'Add Student'}}</button><button class="btn" type="button" :disabled="saving" @click="closeModal">Cancel</button></div>
@@ -201,7 +212,7 @@ async function importCsv() {
   <div v-if="canEdit && importModalOpen" class="student-modal-backdrop" @click.self="closeImportModal">
     <section class="student-modal card" role="dialog" aria-modal="true" aria-labelledby="student-import-title">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem"><h2 id="student-import-title">Import Students from CSV</h2><button type="button" class="btn" :disabled="importing" aria-label="Close import" @click="closeImportModal">✕</button></div>
-      <p>Columns: student_number, given_name, family_name, email (optional), date_of_birth, year_level, house. Date format YYYY-MM-DD. Existing student numbers are updated. Maximum 500 rows.</p>
+      <p>Columns: student_number, given_name, family_name, email (optional), date_of_birth, gender_identity, sporting_division, year_level, house. Date format YYYY-MM-DD. Existing student numbers are updated. Maximum 500 rows.</p>
       <p>School year: {{year}}</p>
       <label class="field">Select CSV file<input type="file" accept=".csv,text/csv" :disabled="importing" @change="readCsv" /></label>
       <p v-if="importError" class="error" role="alert">{{importError}}</p>
