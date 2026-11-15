@@ -1,30 +1,31 @@
 <script setup lang="ts">
 type EventRow={event_id:string;event_name:string;competition_name:string;age_group:string|null;division:string|null;starts_on:string|null;registered:boolean;registration_open:boolean}
-const email=ref(''),code=ref(''),session=ref(''),step=ref<'email'|'code'|'events'>('email')
+const email=ref(''),code=ref(''),session=ref(''),competitionId=ref(''),competitions=ref<{id:string;name:string;starts_on:string|null}[]>([]),step=ref<'email'|'code'|'events'>('email')
 const busy=ref(false),error=ref(''),notice=ref(''),events=ref<EventRow[]>([]),saving=ref('')
+onMounted(async()=>{try{competitions.value=await $fetch('/api/public-registration/competitions')}catch(e:any){error.value=e?.data?.statusMessage||'Unable to load competitions'}})
 const grouped=computed(()=>Object.entries(events.value.reduce((acc:Record<string,EventRow[]>,e)=>{(acc[e.competition_name] ||= []).push(e);return acc},{} as Record<string,EventRow[]>)))
 async function requestCode(){
  busy.value=true;error.value='';notice.value=''
- try{const result=await $fetch<{message:string}>('/api/public-registration/start',{method:'POST',body:{email:email.value}})
+ try{const result=await $fetch<{message:string}>('/api/public-registration/start',{method:'POST',body:{email:email.value,competitionId:competitionId.value}})
  notice.value=result.message;step.value='code'}
  catch(e:any){error.value=e?.data?.statusMessage||e?.message||'Unable to request a code'}
  finally{busy.value=false}
 }
 async function verify(){
  busy.value=true;error.value=''
- try{const result=await $fetch<{session:string}>('/api/public-registration/verify',{method:'POST',body:{email:email.value,code:code.value}})
+ try{const result=await $fetch<{session:string}>('/api/public-registration/verify',{method:'POST',body:{email:email.value,code:code.value,competitionId:competitionId.value}})
  session.value=result.session;step.value='events';await load()}
  catch(e:any){error.value=e?.data?.statusMessage||e?.message||'Verification failed'}
  finally{busy.value=false}
 }
 async function load(){
- try{events.value=await $fetch<EventRow[]>('/api/public-registration/events',{headers:{Authorization:`Bearer ${session.value}`}})}
+ try{events.value=await $fetch<EventRow[]>('/api/public-registration/events',{query:{competitionId:competitionId.value},headers:{Authorization:`Bearer ${session.value}`}})}
  catch(e:any){error.value=e?.data?.statusMessage||e?.message||'Unable to load events'}
 }
 async function toggle(e:EventRow){
  saving.value=e.event_id;error.value='';notice.value=''
  try{
-  await $fetch('/api/public-registration/toggle',{method:'POST',headers:{Authorization:`Bearer ${session.value}`},body:{eventId:e.event_id,register:!e.registered}})
+  await $fetch('/api/public-registration/toggle',{method:'POST',headers:{Authorization:`Bearer ${session.value}`},body:{competitionId:competitionId.value,eventId:e.event_id,register:!e.registered}})
   notice.value=e.registered?'Registration withdrawn.':'Registration confirmed.'
   await load()
  }catch(x:any){error.value=x?.data?.statusMessage||x?.message||'Unable to save registration'}
@@ -41,8 +42,10 @@ function restart(){session.value='';code.value='';events.value=[];step.value='em
    <p v-if="error" class="error" role="alert">{{error}}</p>
    <p v-if="notice" class="success" role="status">{{notice}}</p>
    <form v-if="step==='email'" @submit.prevent="requestCode">
+    <label class="field"><span>Competition</span><select v-model="competitionId" required><option value="" disabled>Select a competition</option><option v-for="c in competitions" :key="c.id" :value="c.id">{{c.name}} — {{c.starts_on||'Date TBA'}}</option></select></label>
+    <p v-if="!competitions.length">No competitions are currently open for registration.</p>
     <label class="field"><span>School email address</span><input v-model.trim="email" type="email" autocomplete="email" maxlength="254" required placeholder="student@school.edu.au"></label>
-    <button class="btn" :disabled="busy">{{busy?'Sending…':'Send verification code'}}</button>
+    <button class="btn" :disabled="busy||!competitionId">{{busy?'Sending…':'Send verification code'}}</button>
    </form>
    <form v-else-if="step==='code'" @submit.prevent="verify">
     <p>Enter the six-digit code sent to <strong>{{email}}</strong>. It expires after 10 minutes.</p>
