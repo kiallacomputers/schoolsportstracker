@@ -269,7 +269,7 @@ async function lifecycle(action:'deactivate'|'restore'|'delete'){
   display: flex;
   align-items: flex-end;
   justify-content: flex-start;
-  gap: calc(2 * var(--tab-curve) + var(--shoulder-clearance));
+  gap: calc((2 * var(--tab-curve) + var(--shoulder-clearance)) / 2);
   margin: 0 0 20px;
   padding: 0 var(--tab-curve);
   border-bottom: 1px solid #3675b6;
