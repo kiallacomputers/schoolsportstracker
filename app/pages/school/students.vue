@@ -229,7 +229,7 @@ async function importCsv() {
 </script>
 <template>
 <div class="page"><div class="shell admin-section">
-  <NuxtLink :to="`/school/dashboard`">← School Dashboard</NuxtLink>
+  <NuxtLink :to="`/school/dashboard`">← Students</NuxtLink>
   <h1>{{schoolName}} — Students</h1>
   <p class="notice">Student records are restricted to your school. School Administrators can edit, disable and reactivate students. Only SuperAdmins can permanently delete student records.</p>
   <p v-if="error" class="error" role="alert">{{error}}</p><p v-if="notice" class="notice" role="status">{{notice}}</p>
@@ -309,7 +309,88 @@ async function importCsv() {
 .student-tile strong{font-size:.9rem;overflow-wrap:anywhere}.student-tile span:not(.student-tile-house){font-size:.8rem;color:#bdcde2}
 .student-tile-house{display:flex;align-items:center;justify-content:center;flex:0 0 48px;width:48px;height:48px;border-radius:9px;border:1px solid #ffffff66;font-weight:800;font-size:1.5rem;color:white;text-shadow:0 1px 3px #0008}
 .student-inactive{color:#ffce83!important;font-size:.75rem}.student-profile{display:flex;flex-direction:column;gap:1rem}.student-profile-header{justify-content:flex-start;background:#102440;border:1px solid #304c70;border-radius:14px;padding:1.25rem}.student-profile-header p{margin:.25rem 0 0;color:#b7cce4}
-.student-profile-tabs{display:flex;flex-wrap:wrap;gap:15px;align-items:flex-end;margin:0 0 -1rem;padding:0 14px;isolation:isolate}
-.student-profile-tab{position:relative;z-index:1;background:#1b3556;color:#d9e7fb;border:1px solid #42648b;border-bottom:0;border-radius:12px 12px 0 0;padding:.75rem 1rem;cursor:pointer;font-weight:600;white-space:nowrap}.student-profile-tab.active{z-index:10;background:#2359a6;border-color:#6798df;color:white}.student-profile-content{position:relative;z-index:0;min-height:200px}.student-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:1rem 0}.student-detail-grid>div{display:flex;flex-direction:column;gap:.25rem}.student-detail-grid small{color:#a8bfdc}.student-history-row{display:flex;flex-direction:column;gap:.25rem;padding:.85rem 0;border-bottom:1px solid #355272}.student-history-row span{color:#b7cce4;font-size:.9rem}
-@media(max-width:1100px){.student-tile-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:700px){.student-directory-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.student-tile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.student-profile-tabs{gap:6px}.student-profile-tab{font-size:.8rem;padding:.6rem .65rem}}@media(max-width:420px){.student-tile-grid{grid-template-columns:1fr 1fr}.student-detail-grid{grid-template-columns:1fr}}
+.student-profile-tabs {
+  --tab-curve: 12px;
+  --shoulder-clearance: 6px;
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: calc((2 * var(--tab-curve) + var(--shoulder-clearance)) / 2);
+  margin: 0 0 0;
+  padding: 0 var(--tab-curve);
+  border-bottom: 1px solid #3675b6;
+  isolation: isolate;
+  overflow: visible;
+}
+.student-profile-tab {
+  --tab-fill: #0b2340;
+  --tab-stroke: #345f8c;
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: max-content;
+  min-width: 0;
+  margin: 0 0 -1px;
+  padding: 11px 18px 12px;
+  border: 1px solid var(--tab-stroke);
+  border-bottom: 0;
+  border-radius: 15px 15px 0 0;
+  background: var(--tab-fill);
+  color: #c9d9ee;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  overflow: visible;
+}
+/* Inverse quarter-circle shoulders: radial gradients paint both the 1px
+   curved outline and the tab fill. Each shoulder is part of its own button. */
+.student-profile-tab::before,
+.student-profile-tab::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  width: var(--tab-curve);
+  height: var(--tab-curve);
+  pointer-events: none;
+  background-repeat: no-repeat;
+}
+.student-profile-tab::before {
+  left: calc(-1 * var(--tab-curve));
+  background-image: radial-gradient(circle at top left,
+    transparent calc(var(--tab-curve) - 1px),
+    var(--tab-stroke) calc(var(--tab-curve) - 0.5px),
+    var(--tab-stroke) var(--tab-curve),
+    var(--tab-fill) calc(var(--tab-curve) + 0.5px));
+}
+.student-profile-tab::after {
+  right: calc(-1 * var(--tab-curve));
+  background-image: radial-gradient(circle at top right,
+    transparent calc(var(--tab-curve) - 1px),
+    var(--tab-stroke) calc(var(--tab-curve) - 0.5px),
+    var(--tab-stroke) var(--tab-curve),
+    var(--tab-fill) calc(var(--tab-curve) + 0.5px));
+}
+.student-profile-tab:hover:not(.active) {
+  --tab-fill: #153657;
+  z-index: 2;
+  color: #fff;
+}
+.student-profile-tab:focus-visible {
+  outline: 2px solid #a4d8ff;
+  outline-offset: 3px;
+  z-index: 12;
+}
+.student-profile-tab.active {
+  --tab-fill: #0865d6;
+  --tab-stroke: #3c9cff;
+  z-index: 10;
+  color: #fff;
+}.student-profile-content{position:relative;z-index:0;min-height:200px}.student-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:1rem 0}.student-detail-grid>div{display:flex;flex-direction:column;gap:.25rem}.student-detail-grid small{color:#a8bfdc}.student-history-row{display:flex;flex-direction:column;gap:.25rem;padding:.85rem 0;border-bottom:1px solid #355272}.student-history-row span{color:#b7cce4;font-size:.9rem}
+@media(max-width:1100px){.student-tile-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:700px){.student-directory-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.student-tile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.student-profile-tabs{overflow-x:auto;overflow-y:visible;gap:15px}.student-profile-tab{font-size:.8rem;padding:.6rem .75rem}}@media(max-width:420px){.student-tile-grid{grid-template-columns:1fr 1fr}.student-detail-grid{grid-template-columns:1fr}}
 </style>
