@@ -150,7 +150,7 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
     </aside>
     <div class="content">
       <header class="top"><button class="toggle" type="button" aria-label="Toggle navigation" @click="mobileOpen=!mobileOpen; desktopCollapsed=!desktopCollapsed">☰</button><div class="top-context"><small>SCHOOL SPORTS TRACKER / WORKSPACE</small><strong>{{ platformAdmin ? 'Platform Administration' : schoolName }}</strong></div><span class="top-role">{{ roleLabel }}</span></header>
-      <main class="page"><slot /></main>
+      <main class="page" :class="{ 'competition-workspace-background': route.path === '/school/competitions' }"><slot /></main>
     </div>
   </div>
 </template>

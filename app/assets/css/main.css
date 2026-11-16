@@ -107,48 +107,41 @@ html, body, #__nuxt { min-height: 100%; background-color: var(--sst-page-navy); 
   .workspace .content > .page { width: 94%; }
 }
 
-/* Competition workspace: full-bleed sport artwork, aligned with the top of the
-   content area immediately below the persistent workspace navigation. */
-.workspace .content > .page.competition-page {
-  position: relative;
-  isolation: isolate;
+/* Competition banner FIX: the WorkspaceShell main.page is the outer container.
+   Paint the artwork here, not behind its opaque nested .page child. */
+.workspace .content > main.page.competition-workspace-background {
   width: 100%;
-  margin-inline: 0;
-  padding-inline: 0;
-  overflow: clip;
-}
-.workspace .content > .page.competition-page::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  pointer-events: none;
-  inset: 0 0 auto;
-  height: clamp(290px, 31vw, 420px);
-  background-image: linear-gradient(90deg, rgba(7,23,44,.82) 0%, rgba(7,23,44,.38) 52%, rgba(7,23,44,.18) 100%), url('/images/sports-embossed-header.webp');
-  background-position: center, center center;
+  margin: 0;
+  padding: 0;
+  max-width: none;
+  background-color: #07172c;
+  background-image:
+    linear-gradient(to bottom, rgba(7,23,44,.08) 0%, rgba(7,23,44,.25) 34%, #07172c 430px),
+    linear-gradient(to right, rgba(7,23,44,.62), rgba(7,23,44,.10)),
+    url('/images/sports-embossed-header.webp');
   background-repeat: no-repeat;
-  background-size: cover;
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%);
+  background-position: top center, top center, top center;
+  background-size: 100% 460px, 100% 460px, 100% 460px;
 }
-/* Disable the old inset 960px artwork so it cannot appear as a second box. */
-.workspace .competition-page .admin-section::before { content: none; }
-.workspace .competition-page .competition-shell {
-  padding-top: 18px;
-  padding-inline: clamp(14px, 2.3vw, 36px);
-  max-width: none !important;
+.workspace .content > main.page.competition-workspace-background > .competition-page {
+  background: transparent;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
-@media (max-width: 760px) {
-  .workspace .content > .page.competition-page::before { height: 300px; background-position: 60% top; }
-  .workspace .competition-page .competition-shell { padding-top: 12px; padding-inline: 12px; }
+.workspace .content > main.page.competition-workspace-background > .competition-page::before,
+.workspace .content > main.page.competition-workspace-background .admin-section::before {
+  content: none;
 }
-
-/* FIX: The banner was painted behind the opaque .page background by z-index:-1.
-   Keep it in the page stacking context, underneath the competition content. */
-.workspace .content > .page.competition-page::before {
-  z-index: 0;
-}
-.workspace .content > .page.competition-page > .competition-shell {
+.workspace .content > main.page.competition-workspace-background .competition-shell {
   position: relative;
   z-index: 1;
+  padding: 18px clamp(16px, 3vw, 44px) 48px;
+}
+@media(max-width:760px) {
+  .workspace .content > main.page.competition-workspace-background {
+    background-size: auto 350px, auto 350px, auto 350px;
+    background-position: top center, top center, top right;
+  }
 }
