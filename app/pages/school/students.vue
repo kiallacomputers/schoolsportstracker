@@ -6,6 +6,43 @@ const busy = ref(true), saving = ref(false), error = ref(''), notice = ref('')
 const schoolName = ref(''), canEdit = ref(false), isSuperAdmin = ref(false), statusFilter = ref('active')
 const rows = ref<any[]>([]), houses = ref<any[]>([]), enrolments = ref<any[]>([])
 const year = ref(new Date().getFullYear()), search = ref('')
+const yearFilter = ref('all'), houseFilter = ref('all')
+const selectedStudent = ref<any>(null), profileTab = ref('details'), profileBusy = ref(false), profileError = ref('')
+const studentEntries = ref<any[]>([]), studentResults = ref<any[]>([])
+const profileTabs = [{id:'details',label:'Student Details'},{id:'events',label:'Completed Events'},{id:'records',label:'Records Held'},{id:'registrations',label:'Registrations'},{id:'results',label:'Results History'},{id:'achievements',label:'Achievements'}]
+const houseFor = (student:any) => houses.value.find(h => h.id === enrolmentFor(student.id)?.house_id)
+const studentYear = (student:any) => enrolmentFor(student.id)?.year_level || '—'
+const filteredStudents = computed(() => display.value.filter(student => (yearFilter.value === 'all' || String(studentYear(student)) === yearFilter.value) && (houseFilter.value === 'all' || enrolmentFor(student.id)?.house_id === houseFilter.value)))
+const availableYears = computed(() => [...new Set(rows.value.map(s => String(studentYear(s))).filter(v => v !== '—'))].sort((a,b) => Number(a)-Number(b)))
+const completedResults = computed(() => studentResults.value.filter(r => !!r.published_at))
+async function openStudent(student:any) {
+  selectedStudent.value = student; profileTab.value = 'details'; studentEntries.value = []; studentResults.value = []; profileError.value = ''; profileBusy.value = true
+  try {
+    const participants = await db.from('entry_participants').select('entry_id').eq('student_id',student.id).limit(1000)
+    if (participants.error) throw participants.error
+    const ids = [...new Set((participants.data || []).map(p => p.entry_id))]
+    if (ids.length) {
+      const entries = await db.from('event_entries').select('id,competition_event_id,created_at,competition_events(id,age_group,division,event_definitions(name,measurement),competitions(name))').eq('school_id',schoolId.value).in('id',ids).limit(1000)
+      if (entries.error) throw entries.error
+      studentEntries.value = entries.data || []
+      const results = await db.from('event_results').select('id,entry_id,performance_value,placing_position,points,published_at,status').in('entry_id',studentEntries.value.map(e=>e.id)).limit(1000)
+      if (results.error) throw results.error
+      studentResults.value = results.data || []
+    }
+  } catch (e:any) { profileError.value = e.message || 'Could not load student sporting history.' }
+  finally { profileBusy.value = false }
+}
+const resultEvent = (result:any) => studentEntries.value.find(e=>e.id === result.entry_id)
+const eventLabel = (entry:any) => entry?.competition_events?.event_definitions?.name || 'Event'
+const competitionLabel = (entry:any) => entry?.competition_events?.competitions?.name || 'Competition'
+const performanceLabel = (result:any) => {
+  if (result.performance_value == null) return '—'
+  const measurement = resultEvent(result)?.competition_events?.event_definitions?.measurement
+  if (measurement === 'time_ms') return (Number(result.performance_value)/1000).toFixed(2)+' s'
+  if (measurement === 'distance_mm') return (Number(result.performance_value)/1000).toFixed(2)+' m'
+  return String(result.performance_value)
+}
+
 const selectedHouseId = computed(() => typeof route.query.house === 'string' ? route.query.house : '')
 const selectedHouse = computed(() => houses.value.find(h => h.id === selectedHouseId.value))
 function houseStudentsUrl(houseId: string) { return { path: '/school/students', query: { school: schoolId.value, house: houseId } } }
@@ -221,7 +258,27 @@ async function importCsv() {
       <div style="display:flex;gap:.75rem;margin-top:1rem;flex-wrap:wrap"><button v-if="csvPreview.length" type="button" class="btn" :disabled="importing" @click="importCsv">{{importing?'Importing…':'Import Students'}}</button><button type="button" class="btn" :disabled="importing" @click="closeImportModal">Close</button></div>
     </section>
   </div>
-  <section class="card"><div v-if="selectedHouseId" class="house-filter-heading"><div><h2>{{ selectedHouse?.name || 'Selected House' }} — Students ({{display.length}})</h2><p>Students assigned to this house for {{year}}.</p></div><button type="button" class="btn" @click="clearHouseFilter">View All Students</button></div><h2 v-else>Students ({{display.length}})</h2><label class="field">Show students<select v-model="statusFilter"><option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All students</option></select></label><input v-model="search" placeholder="Search by name, email or student number" aria-label="Search students" /><p v-if="busy">Loading…</p><div v-for="s in display" :key="s.id" class="data-row" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap"><div class="student-identity"><NuxtLink v-if="enrolmentFor(s.id)?.house_id" class="student-house-tile student-house-link" :to="houseStudentsUrl(enrolmentFor(s.id).house_id)" :style="{ backgroundColor: houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.colour || '#58677d' }" :title="`View all students in ${houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name || 'this house'}`" :aria-label="`View students in ${houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name || 'this house'}`">{{ (houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name || '—').charAt(0).toUpperCase() }}</NuxtLink><span v-else class="student-house-tile" style="background-color:#58677d" title="No house assigned" aria-label="No house assigned">—</span><div><strong>{{s.family_name}}, {{s.given_name}}</strong><small style="display:block">{{s.is_active === false ? 'Inactive · ' : ''}}{{s.student_number}} · {{s.email || 'No email'}} · Year {{enrolmentFor(s.id)?.year_level||'—'}} · {{houses.find(h=>h.id===enrolmentFor(s.id)?.house_id)?.name||'No house'}}</small><small class="student-sport-details" style="display:block;margin-top:.25rem">Gender identity: {{s.gender_identity ? ({'male':'Male','female':'Female','non-binary':'Non-binary','self-describe':'Self-describe','prefer not to say':'Prefer not to say'}[s.gender_identity] || s.gender_identity) : 'Not set'}} <span aria-hidden="true"> · </span> Sporting division: {{s.sporting_division ? ({'boys':'Boys','girls':'Girls','mixed':'Mixed/Open'}[s.sporting_division] || s.sporting_division) : 'Not set'}}</small></div></div><div v-if="canEdit" style="display:flex;gap:.5rem"><button class="btn" @click="startEdit(s)">Edit</button><button class="btn" :disabled="saving" @click="setStudentActive(s, s.is_active === false)">{{s.is_active === false ? 'Reactivate' : 'Disable'}}</button><button v-if="isSuperAdmin" class="btn" :disabled="saving" @click="remove(s)">Delete Permanently</button></div></div><p v-if="!busy&&!display.length">No students found.</p></section>
+  <section class="student-directory card" v-if="!selectedStudent">
+    <div class="student-directory-heading"><div><h2>{{ selectedHouse?.name || 'Student Directory' }}</h2><p>{{ filteredStudents.length }} students · {{schoolName}}</p></div><div class="student-directory-actions"><button v-if="selectedHouseId" type="button" class="btn" @click="clearHouseFilter">Clear House Filter</button><button v-if="canEdit" type="button" class="btn" @click="startAdd">+ Add Student</button><button v-if="canEdit" type="button" class="btn" @click="importModalOpen=true">Import CSV</button></div></div>
+    <div class="student-directory-filters"><label class="field">Search<input v-model="search" placeholder="Name, email or student number" /></label><label class="field">House<select v-model="houseFilter"><option value="all">All Houses</option><option v-for="h in houses" :key="h.id" :value="h.id">{{h.name}}</option></select></label><label class="field">Year Level<select v-model="yearFilter"><option value="all">All Years</option><option v-for="y in availableYears" :key="y" :value="y">Year {{y}}</option></select></label><label class="field">Status<select v-model="statusFilter"><option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All Students</option></select></label></div>
+    <p v-if="busy">Loading students…</p>
+    <div v-else class="student-tile-grid"><button v-for="student in filteredStudents" :key="student.id" type="button" class="student-tile" @click="openStudent(student)"><span class="student-tile-house" :style="{backgroundColor:houseFor(student)?.colour || '#52647e'}">{{houseFor(student)?.name?.charAt(0).toUpperCase() || '—'}}</span><strong>{{student.given_name}} {{student.family_name}}</strong><span>Year {{studentYear(student)}}</span><span>{{houseFor(student)?.name || 'No House'}}</span><span v-if="student.is_active===false" class="student-inactive">Inactive</span></button></div>
+    <p v-if="!busy && !filteredStudents.length">No students match your filters.</p>
+  </section>
+  <section v-else class="student-profile">
+    <button type="button" class="btn" @click="selectedStudent=null">← Back to Students</button>
+    <div class="student-profile-header"><span class="student-tile-house" :style="{backgroundColor:houseFor(selectedStudent)?.colour || '#52647e'}">{{houseFor(selectedStudent)?.name?.charAt(0).toUpperCase() || '—'}}</span><div><h2>{{selectedStudent.given_name}} {{selectedStudent.family_name}}</h2><p>Year {{studentYear(selectedStudent)}} · {{houseFor(selectedStudent)?.name || 'No House'}}</p></div><span v-if="selectedStudent.is_active===false" class="student-inactive">Inactive</span></div>
+    <div class="student-profile-tabs" role="tablist" aria-label="Student profile sections"><button v-for="tab in profileTabs" :key="tab.id" type="button" role="tab" :aria-selected="profileTab===tab.id" :class="['student-profile-tab', {active:profileTab===tab.id}]" @click="profileTab=tab.id">{{tab.label}}</button></div>
+    <div class="student-profile-content card" role="tabpanel">
+      <p v-if="profileBusy">Loading sporting history…</p><p v-if="profileError" class="error">{{profileError}}</p>
+      <template v-if="profileTab==='details'"><h3>Student Details</h3><div class="student-detail-grid"><div><small>Student Number</small><strong>{{selectedStudent.student_number}}</strong></div><div><small>Email</small><strong>{{selectedStudent.email || 'Not provided'}}</strong></div><div><small>Year Level</small><strong>{{studentYear(selectedStudent)}}</strong></div><div><small>House</small><strong>{{houseFor(selectedStudent)?.name || 'Not assigned'}}</strong></div><div><small>Date of Birth</small><strong>{{selectedStudent.date_of_birth || 'Not provided'}}</strong></div><div><small>Sporting Division</small><strong>{{selectedStudent.sporting_division || 'Not assigned'}}</strong></div><div><small>Status</small><strong>{{selectedStudent.is_active===false?'Inactive':'Active'}}</strong></div></div><div v-if="canEdit" class="student-profile-actions"><button class="btn" @click="startEdit(selectedStudent)">Edit Student</button><button class="btn" :disabled="saving" @click="setStudentActive(selectedStudent,selectedStudent.is_active===false).then(()=>{selectedStudent=null})">{{selectedStudent.is_active===false?'Reactivate':'Disable'}} Student</button><button v-if="isSuperAdmin" class="btn" :disabled="saving" @click="remove(selectedStudent).then(()=>{selectedStudent=null})">Delete Permanently</button></div></template>
+      <template v-else-if="profileTab==='registrations'"><h3>Event Registrations</h3><div v-for="entry in studentEntries" :key="entry.id" class="student-history-row"><strong>{{eventLabel(entry)}}</strong><span>{{competitionLabel(entry)}} · {{entry.competition_events?.age_group || ''}} {{entry.competition_events?.division || ''}}</span></div><p v-if="!profileBusy && !studentEntries.length">No registrations found.</p></template>
+      <template v-else-if="profileTab==='events'"><h3>Completed Events</h3><div v-for="result in completedResults" :key="result.id" class="student-history-row"><strong>{{eventLabel(resultEvent(result))}}</strong><span>{{competitionLabel(resultEvent(result))}} · {{performanceLabel(result)}} · Place {{result.placing_position || '—'}}</span></div><p v-if="!profileBusy && !completedResults.length">No published completed events found.</p></template>
+      <template v-else-if="profileTab==='results'"><h3>Results History</h3><div v-for="result in studentResults" :key="result.id" class="student-history-row"><strong>{{eventLabel(resultEvent(result))}}</strong><span>{{performanceLabel(result)}} · Place {{result.placing_position || '—'}} · {{result.published_at?'Published':'Unpublished'}}</span></div><p v-if="!profileBusy && !studentResults.length">No results recorded.</p></template>
+      <template v-else-if="profileTab==='records'"><h3>Records Held</h3><p>Verified school and competition records will appear here once record tracking is configured. Event results are not automatically classified as records.</p></template>
+      <template v-else><h3>Achievements</h3><p>Verified medals, awards and milestones will appear here when achievement tracking is configured.</p></template>
+    </div>
+  </section>
 </div></div>
 </template>
 
@@ -238,4 +295,21 @@ async function importCsv() {
 .student-modal { width:min(100%,720px);max-height:calc(100vh - 2rem);overflow-y:auto;background:#0d2342;color:#fff;border:1px solid #315178;box-shadow:0 20px 60px rgba(0,0,0,.45);padding:1.5rem;border-radius:16px }
 .student-confirm { margin-top:1rem;padding:1rem;border:1px solid #527196;border-radius:8px;background:#133b6c;color:#fff }
 
+</style>
+
+<style scoped>
+.student-directory,.student-profile-content{background:#102440;color:#edf4ff;border:1px solid #304c70;border-radius:16px;padding:1.25rem}
+.student-directory-heading,.student-profile-header,.student-directory-actions,.student-profile-actions{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.student-directory-heading h2,.student-profile-header h2{margin:0}
+.student-directory-filters{display:grid;grid-template-columns:2fr repeat(3,minmax(120px,1fr));gap:.75rem;margin:1.25rem 0}
+.student-directory-filters .field{min-width:0}
+.student-tile-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.75rem}
+.student-tile{display:flex;flex-direction:column;align-items:center;gap:.4rem;text-align:center;background:#192f4f;border:1px solid #385577;border-radius:12px;color:#e9f3ff;padding:1.1rem .45rem;cursor:pointer;min-width:0;transition:background .15s,transform .15s}
+.student-tile:hover,.student-tile:focus-visible{background:#25446e;transform:translateY(-2px);outline-color:#77aaf8}
+.student-tile strong{font-size:.9rem;overflow-wrap:anywhere}.student-tile span:not(.student-tile-house){font-size:.8rem;color:#bdcde2}
+.student-tile-house{display:flex;align-items:center;justify-content:center;flex:0 0 48px;width:48px;height:48px;border-radius:9px;border:1px solid #ffffff66;font-weight:800;font-size:1.5rem;color:white;text-shadow:0 1px 3px #0008}
+.student-inactive{color:#ffce83!important;font-size:.75rem}.student-profile{display:flex;flex-direction:column;gap:1rem}.student-profile-header{justify-content:flex-start;background:#102440;border:1px solid #304c70;border-radius:14px;padding:1.25rem}.student-profile-header p{margin:.25rem 0 0;color:#b7cce4}
+.student-profile-tabs{display:flex;flex-wrap:wrap;gap:15px;align-items:flex-end;margin:0 0 -1rem;padding:0 14px;isolation:isolate}
+.student-profile-tab{position:relative;z-index:1;background:#1b3556;color:#d9e7fb;border:1px solid #42648b;border-bottom:0;border-radius:12px 12px 0 0;padding:.75rem 1rem;cursor:pointer;font-weight:600;white-space:nowrap}.student-profile-tab.active{z-index:10;background:#2359a6;border-color:#6798df;color:white}.student-profile-content{position:relative;z-index:0;min-height:200px}.student-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:1rem 0}.student-detail-grid>div{display:flex;flex-direction:column;gap:.25rem}.student-detail-grid small{color:#a8bfdc}.student-history-row{display:flex;flex-direction:column;gap:.25rem;padding:.85rem 0;border-bottom:1px solid #355272}.student-history-row span{color:#b7cce4;font-size:.9rem}
+@media(max-width:1100px){.student-tile-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:700px){.student-directory-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.student-tile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.student-profile-tabs{gap:6px}.student-profile-tab{font-size:.8rem;padding:.6rem .65rem}}@media(max-width:420px){.student-tile-grid{grid-template-columns:1fr 1fr}.student-detail-grid{grid-template-columns:1fr}}
 </style>
