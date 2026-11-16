@@ -61,7 +61,6 @@ const links = computed(() => {
     const suffix = activeSchool.value ? '?school=' + encodeURIComponent(activeSchool.value) : ''
     return [
       {label:'Schools',to:'/admin/schools',icon:'🏫'},
-      {label:'Email Settings',to:'/admin/email',icon:'✉'},
       {label:'All Competitions',to:'/admin/competitions',icon:'🏆'},
       ...(activeSchool.value ? [
         {label:'Students',to:'/school/students'+suffix,icon:'🎓'},

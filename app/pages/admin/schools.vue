@@ -13,7 +13,22 @@ const showInactive = ref(false)
 const activeTab = ref<'overview'|'details'|'domains'|'administration'>('overview')
 const search = ref('')
 const route = useRoute()
-const mainSection = ref<'schools'|'requests'>('schools')
+const mainSection = ref<'schools'|'requests'|'email'>('schools')
+const testRecipient = ref('')
+const emailBusy = ref(false)
+const emailError = ref('')
+const emailResult = ref('')
+async function sendTestEmail(){
+  emailBusy.value = true; emailError.value = ''; emailResult.value = ''
+  try {
+    const {data:{session}} = await db.auth.getSession()
+    if (!session) throw new Error('Please sign in again')
+    const response = await $fetch<{message:string}>('/api/admin/email/test', {method:'POST',headers:{Authorization:`Bearer ${session.access_token}`},body:{to:testRecipient.value}})
+    emailResult.value = response.message
+  } catch(e:any) { emailError.value = e?.data?.statusMessage || e?.message || 'Unable to send test email' }
+  finally { emailBusy.value = false }
+}
+
 const requests = ref<any[]>([])
 const requestNotes = ref<Record<string,string>>({})
 const requestLogos = ref<Record<string,string>>({})
@@ -58,7 +73,7 @@ async function inviteRequest(r:any){
   catch(e:any){requestError.value=e?.data?.statusMessage||e?.message||'Invitation failed'}
   finally{requestInviteBusy.value=''}
 }
-function selectSection(section:'schools'|'requests'){
+function selectSection(section:'schools'|'requests'|'email'){
   mainSection.value=section
   if(section==='requests') void loadRequests()
 }
@@ -83,7 +98,7 @@ async function load(){
   error.value=s.error?.message||d.error?.message||''
   if(!schools.value.some(x=>x.id===selectedId.value)) selectedId.value=(schools.value.find(x=>!x.deactivated_at)||schools.value[0])?.id||''
 }
-onMounted(async()=>{await load();if(route.query.tab==='requests')selectSection('requests');else await loadRequests()})
+onMounted(async()=>{await load();if(route.query.tab==='requests')selectSection('requests');else if(route.query.tab==='email')selectSection('email');else await loadRequests()})
 async function addSchool(){
   clearMessages(); busy.value=true
   const r=await db.from('schools').insert({name:name.value.trim(),code:code.value.trim()||null}).select('id').single()
@@ -157,14 +172,28 @@ async function lifecycle(action:'deactivate'|'restore'|'delete'){
       <div>
         <div class="schools-breadcrumb"><NuxtLink to="/dashboard">Dashboard</NuxtLink><span>›</span><span>Administration</span><span>›</span><strong>Schools</strong></div>
         <h1><span class="schools-title-icon">▦</span> Schools</h1>
-        <p>Manage school profiles, requests, verified email domains and access.</p>
+        <p>Manage school profiles, requests, email settings, verified domains and access.</p>
       </div>
       <button v-if="mainSection==='schools'" class="schools-primary" type="button" @click="showAddSchool = !showAddSchool">{{ showAddSchool ? 'Close' : '+ Add School' }}</button>
     </header>
     <nav class="schools-main-tabs" aria-label="Schools sections">
       <button type="button" :class="{'schools-main-active':mainSection==='schools'}" @click="selectSection('schools')">Schools</button>
       <button type="button" :class="{'schools-main-active':mainSection==='requests'}" @click="selectSection('requests')">School Requests <span class="schools-request-count">{{ pendingRequests.length }}</span></button>
+      <button type="button" :class="{'schools-main-active':mainSection==='email'}" @click="selectSection('email')">Email Settings</button>
     </nav>
+    <section v-if="mainSection==='email'" class="schools-panel schools-requests-panel schools-email-panel">
+      <div class="schools-panel-head"><div><h2>Email Settings</h2><p class="schools-muted">Platform-wide Microsoft Graph email delivery for School Sports Tracker.</p></div></div>
+      <div class="schools-email-info"><span>Sender mailbox</span><strong>sportstracker@kiallacomputers.com.au</strong><p class="schools-muted">The sending mailbox is configured using the Netlify environment variable MICROSOFT_SENDER_EMAIL.</p></div>
+      <h3>Send a test email</h3>
+      <p class="schools-muted">Only Platform Administrators can send a test email.</p>
+      <form class="schools-form schools-email-form" @submit.prevent="sendTestEmail">
+        <label>Recipient email<input v-model="testRecipient" type="email" required autocomplete="email" placeholder="you@example.com"></label>
+        <button class="schools-primary" type="submit" :disabled="emailBusy">{{ emailBusy ? 'Sending…' : 'Send Test Email' }}</button>
+      </form>
+      <p v-if="emailError" class="schools-alert schools-error" role="alert">{{ emailError }}</p>
+      <p v-if="emailResult" class="schools-alert schools-success" role="status">{{ emailResult }}</p>
+      <p class="schools-muted schools-email-note">Changing the sending mailbox requires updating Netlify environment variables and redeploying. Supabase Auth verification and password-reset emails require separate SMTP configuration or a Send Email Hook.</p>
+    </section>
     <section v-if="mainSection==='requests'" class="schools-panel schools-requests-panel">
       <div class="schools-panel-head"><div><h2>School Requests</h2><p class="schools-muted">Verify the school and its representative before approval. Approval does not automatically grant administrator access.</p></div><div class="schools-actions"><button class="schools-secondary" type="button" @click="requestFilter=requestFilter==='pending'?'all':'pending'">{{ requestFilter==='pending'?'Show All Requests':'Show Pending Only' }}</button><button class="schools-secondary" type="button" @click="loadRequests">Refresh</button></div></div>
       <p v-if="requestError" class="schools-alert schools-error" role="alert">{{ requestError }}</p>
@@ -234,4 +263,5 @@ async function lifecycle(action:'deactivate'|'restore'|'delete'){
 <style scoped>
 .schools-workspace{padding:28px;max-width:1600px;margin:auto;color:#f1f6ff}.schools-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:24px}.schools-breadcrumb{display:flex;gap:12px;align-items:center;color:#95b3d7;font-size:13px;margin-bottom:12px}.schools-breadcrumb a{color:#7ec4ff}.schools-heading h1{font-size:clamp(26px,3vw,38px);font-weight:800;margin:0;display:flex;align-items:center;gap:14px}.schools-title-icon,.schools-selected-avatar{display:grid;place-items:center;background:#0752b4;border-radius:12px;width:52px;height:52px;color:white}.schools-heading p,.schools-selected-header p{color:#9eb5d3;margin:8px 0 0}.schools-primary,.schools-secondary,.schools-danger,.schools-danger-outline{border:1px solid #37628e;border-radius:9px;padding:10px 16px;color:#eef6ff;background:#16365b;cursor:pointer;font-weight:650;white-space:nowrap}.schools-primary{background:#075bc9;border-color:#2276ec}.schools-danger{background:#a52c37;border-color:#c94d55}.schools-danger-outline{color:#ffb7bd;border-color:#8a4855;background:#422431}.schools-primary:disabled,.schools-secondary:disabled,.schools-danger:disabled,.schools-danger-outline:disabled{opacity:.45;cursor:not-allowed}.schools-panel,.schools-stat{background:linear-gradient(140deg,#102b4d,#0a1d37);border:1px solid #28527d;border-radius:14px;min-width:0}.schools-add{padding:22px;margin-bottom:20px}.schools-panel h2{font-size:19px;margin:0}.schools-panel h3{font-size:17px;margin:0 0 18px}.schools-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-bottom:20px}.schools-stat{display:flex;gap:18px;align-items:center;padding:20px}.schools-stat-icon{font-size:27px;color:#6cb7ff}.schools-stat strong{display:block;font-size:30px;line-height:1.1}.schools-stat span:last-child{display:block;color:#c2d3e8;margin-top:4px}.schools-layout{display:grid;grid-template-columns:minmax(280px,1fr) minmax(0,2fr);gap:20px;align-items:start}.schools-directory{padding:20px}.schools-detail{padding:24px;min-height:420px}.schools-panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.schools-panel-head span,.schools-muted{color:#a7bdd7}.schools-search,.schools-form input:not([type=checkbox]),.schools-danger-zone input{width:100%;min-width:0;background:#091b32;color:#f3f7ff;border:1px solid #3b5d81;border-radius:8px;padding:12px;box-sizing:border-box}.schools-check{display:flex!important;align-items:center;gap:10px;color:#b9cde6;font-size:13px;margin:14px 0}.schools-check input{width:auto!important;accent-color:#2185ff}.schools-list{display:grid;gap:9px;max-height:650px;overflow:auto}.schools-school{width:100%;display:flex;gap:12px;align-items:center;text-align:left;border:1px solid #294a70;border-radius:10px;background:#102844;padding:12px;color:#fff;cursor:pointer}.schools-school-active{background:#104582;border-color:#2888fa}.schools-school-avatar{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:9px;background:#0860c8;font-weight:800}.schools-school-info{flex:1;min-width:0}.schools-school-info strong,.schools-school-info small{display:block;overflow:hidden;text-overflow:ellipsis}.schools-school-info small{color:#aac2df;margin-top:3px}.schools-status{font-size:11px;padding:5px 8px;border-radius:20px}.schools-active{background:#164f40;color:#a9f2c6}.schools-inactive{background:#56393d;color:#ffbec1}.schools-selected-header{display:flex;gap:16px;align-items:center;margin-bottom:23px}.schools-selected-avatar{width:58px;height:58px;font-size:25px;font-weight:800}.schools-tabs{display:flex;gap:5px;border:1px solid #2d537c;background:#0b2340;border-radius:10px;padding:5px;overflow:auto}.schools-tabs button{flex:1;border:0;background:transparent;color:#c7d9ef;padding:13px 9px;border-radius:8px;white-space:nowrap;cursor:pointer;font-weight:650}.schools-tabs .schools-tab-active{background:#095bc9;color:white}.schools-tab-content{padding-top:25px}.schools-overview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:26px}.schools-overview-grid>div{border:1px solid #2a527d;border-radius:10px;padding:16px;background:#0b2543}.schools-overview-grid span{display:block;color:#a8bfdc;font-size:13px;margin-bottom:8px}.schools-overview-grid strong{font-size:19px}.schools-actions{display:flex;gap:9px;flex-wrap:wrap}.schools-form{display:grid;gap:16px;max-width:650px}.schools-form label,.schools-danger-zone label{display:grid;gap:7px;color:#d4e4f7}.schools-form .schools-check{display:flex}.schools-add-form{grid-template-columns:2fr 1fr auto;align-items:end;max-width:none}.schools-domain-form{grid-template-columns:1fr auto;align-items:end;margin-bottom:20px}.schools-domain{border-top:1px solid #294b70;padding:18px 0}.schools-domain p{color:#a7bfdc;font-size:13px;margin:6px 0 14px}.schools-primary-tag{display:inline-block;margin-left:10px;font-size:11px;border-radius:20px;background:#134d86;color:#c5e4ff;padding:3px 8px}.schools-danger-zone{margin:25px 0;padding:20px;border:1px solid #874955;border-radius:12px;background:#321f30}.schools-danger-zone p{color:#e8b8c0}.schools-danger-zone label{margin-bottom:14px}.schools-alert{padding:13px 17px;border-radius:9px;margin-bottom:18px}.schools-error{background:#492634;color:#ffc9cf}.schools-success{background:#1a493e;color:#b3f2ce}@media(max-width:1100px){.schools-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.schools-layout{grid-template-columns:1fr}.schools-list{max-height:300px}}@media(max-width:620px){.schools-workspace{padding:14px}.schools-heading{align-items:flex-start}.schools-heading h1{font-size:25px}.schools-heading .schools-primary{padding:10px}.schools-stats{gap:9px}.schools-stat{padding:13px;gap:9px}.schools-stat strong{font-size:23px}.schools-stat span:last-child{font-size:12px}.schools-detail,.schools-directory{padding:15px}.schools-add-form,.schools-domain-form,.schools-overview-grid{grid-template-columns:1fr}.schools-selected-header h2{font-size:19px}.schools-tabs button{flex:none}.schools-school{flex-wrap:wrap}}
 .schools-main-tabs{display:flex;gap:8px;margin:0 0 20px;border-bottom:1px solid #31577c;padding-bottom:9px}.schools-main-tabs button{border:0;background:transparent;color:#bcd4f1;padding:12px 18px;border-radius:9px;font-weight:700;cursor:pointer}.schools-main-tabs .schools-main-active{background:#075bc9;color:#fff}.schools-request-count{display:inline-block;margin-left:7px;background:#1b4c83;border-radius:20px;padding:2px 8px}.schools-requests-panel{padding:24px}.schools-request-card{border:1px solid #31577c;background:#0a2340;border-radius:12px;padding:20px;margin-top:16px}.schools-request-head{display:flex;align-items:center;gap:18px;margin-bottom:18px}.schools-request-logo{max-width:110px;max-height:90px;object-fit:contain}.schools-request-head h3{margin:0 0 8px}.schools-pending{background:#57431f;color:#ffe1a0}.schools-request-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}.schools-request-facts>div{min-width:0}.schools-request-facts span{display:block;color:#9fb8d7;font-size:12px;margin-bottom:5px}.schools-request-facts strong{overflow-wrap:anywhere}.schools-request-label{display:grid;gap:8px;color:#d4e4f7;margin:15px 0}.schools-request-label input,.schools-request-label textarea{width:100%;background:#091b32;color:#fff;border:1px solid #3b5d81;border-radius:8px;padding:12px;box-sizing:border-box}.schools-request-invite{margin-top:18px;padding:16px;border:1px solid #31577c;border-radius:10px}.schools-request-invite h3{margin-bottom:6px}@media(max-width:620px){.schools-request-facts{grid-template-columns:1fr}.schools-requests-panel{padding:14px}.schools-requests-panel .schools-panel-head{flex-wrap:wrap}.schools-main-tabs button{padding:10px}}
+.schools-email-panel{max-width:900px}.schools-email-info{padding:18px;border:1px solid #31577c;background:#0a2340;border-radius:10px;margin:18px 0 24px}.schools-email-info span{display:block;color:#9fb8d7;font-size:13px;margin-bottom:7px}.schools-email-info strong{overflow-wrap:anywhere}.schools-email-info p{margin:10px 0 0}.schools-email-form{margin:15px 0 20px}.schools-email-form button{justify-self:start}.schools-email-note{margin-top:26px;line-height:1.6}@media(max-width:620px){.schools-main-tabs{overflow-x:auto}.schools-main-tabs button{white-space:nowrap}}
 </style>
