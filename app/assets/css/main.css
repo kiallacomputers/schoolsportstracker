@@ -142,3 +142,13 @@ html, body, #__nuxt { min-height: 100%; background-color: var(--sst-page-navy); 
   .workspace .content > .page.competition-page::before { height: 300px; background-position: 60% top; }
   .workspace .competition-page .competition-shell { padding-top: 12px; padding-inline: 12px; }
 }
+
+/* FIX: The banner was painted behind the opaque .page background by z-index:-1.
+   Keep it in the page stacking context, underneath the competition content. */
+.workspace .content > .page.competition-page::before {
+  z-index: 0;
+}
+.workspace .content > .page.competition-page > .competition-shell {
+  position: relative;
+  z-index: 1;
+}
