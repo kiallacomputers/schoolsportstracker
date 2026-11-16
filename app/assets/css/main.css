@@ -106,3 +106,39 @@ html, body, #__nuxt { min-height: 100%; background-color: var(--sst-page-navy); 
 @media (max-width: 800px) {
   .workspace .content > .page { width: 94%; }
 }
+
+/* Competition workspace: full-bleed sport artwork, aligned with the top of the
+   content area immediately below the persistent workspace navigation. */
+.workspace .content > .page.competition-page {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  margin-inline: 0;
+  padding-inline: 0;
+  overflow: clip;
+}
+.workspace .content > .page.competition-page::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  inset: 0 0 auto;
+  height: clamp(290px, 31vw, 420px);
+  background-image: linear-gradient(90deg, rgba(7,23,44,.82) 0%, rgba(7,23,44,.38) 52%, rgba(7,23,44,.18) 100%), url('/images/sports-embossed-header.webp');
+  background-position: center, center center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%);
+}
+/* Disable the old inset 960px artwork so it cannot appear as a second box. */
+.workspace .competition-page .admin-section::before { content: none; }
+.workspace .competition-page .competition-shell {
+  padding-top: 18px;
+  padding-inline: clamp(14px, 2.3vw, 36px);
+  max-width: none !important;
+}
+@media (max-width: 760px) {
+  .workspace .content > .page.competition-page::before { height: 300px; background-position: 60% top; }
+  .workspace .competition-page .competition-shell { padding-top: 12px; padding-inline: 12px; }
+}
