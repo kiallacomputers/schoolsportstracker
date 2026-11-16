@@ -12,6 +12,57 @@ const confirmation = ref('')
 const showInactive = ref(false)
 const activeTab = ref<'overview'|'details'|'domains'|'administration'>('overview')
 const search = ref('')
+const route = useRoute()
+const mainSection = ref<'schools'|'requests'>('schools')
+const requests = ref<any[]>([])
+const requestNotes = ref<Record<string,string>>({})
+const requestLogos = ref<Record<string,string>>({})
+const requestInviteEmails = ref<Record<string,string>>({})
+const requestBusy = ref('')
+const requestInviteBusy = ref('')
+const requestError = ref('')
+const requestMessage = ref('')
+const requestNotice = ref('')
+const requestFilter = ref<'pending'|'all'>('pending')
+const pendingRequests = computed(() => requests.value.filter(r => r.status === 'pending'))
+const shownRequests = computed(() => requestFilter.value === 'pending' ? pendingRequests.value : requests.value)
+async function loadRequests(){
+  const r = await db.from('school_requests').select('id,school_name,school_domain,school_code,school_website,contact_name,contact_email,contact_position,contact_phone,notes,logo_path,status,created_at,review_notes,created_school_id').order('created_at',{ascending:false})
+  requests.value = r.data || []
+  requestError.value = r.error?.message || ''
+  requestLogos.value = {}
+  await Promise.all(requests.value.filter(x=>x.logo_path).map(async x=>{
+    const result = await db.storage.from('school-logos').createSignedUrl(x.logo_path,1800)
+    if(result.data?.signedUrl) requestLogos.value[x.id] = result.data.signedUrl
+  }))
+}
+async function requestPost(url:string,body:any){
+  const {data:{session}} = await db.auth.getSession()
+  if(!session) throw new Error('Sign in again')
+  return await $fetch(url,{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`},body})
+}
+async function reviewRequest(r:any,approve:boolean){
+  if(!confirm(`${approve?'Approve':'Reject'} ${r.school_name}? Approval creates the school but does NOT grant administrator access.`)) return
+  requestBusy.value=r.id;requestError.value='';requestMessage.value='';requestNotice.value=''
+  const res=await db.rpc('review_school_enquiry',{p_request_id:r.id,p_approve:approve,p_notes:requestNotes.value[r.id]||null})
+  requestBusy.value=''
+  if(res.error){requestError.value=res.error.message;return}
+  requestMessage.value=approve?'School created. You can now invite its administrator.':'Request rejected.'
+  await Promise.all([loadRequests(),load()])
+  try{await requestPost('/api/admin/school-enquiries/notify',{requestId:r.id})}
+  catch(e:any){requestNotice.value='Review saved, but notification email failed: '+(e?.data?.statusMessage||e?.message||'Unknown error')}
+}
+async function inviteRequest(r:any){
+  requestInviteBusy.value=r.id;requestError.value='';requestMessage.value=''
+  try{const result=await requestPost('/api/admin/school-invitations/send',{requestId:r.id,email:requestInviteEmails.value[r.id]||r.contact_email}) as any;requestMessage.value=result.message}
+  catch(e:any){requestError.value=e?.data?.statusMessage||e?.message||'Invitation failed'}
+  finally{requestInviteBusy.value=''}
+}
+function selectSection(section:'schools'|'requests'){
+  mainSection.value=section
+  if(section==='requests') void loadRequests()
+}
+
 function setTab(tab: string){ activeTab.value = tab as typeof activeTab.value }
 const showAddSchool = ref(false)
 const filteredSchools = computed(() => visibleSchools.value.filter(s => (s.name + ' ' + (s.code || '')).toLowerCase().includes(search.value.toLowerCase())))
@@ -32,7 +83,7 @@ async function load(){
   error.value=s.error?.message||d.error?.message||''
   if(!schools.value.some(x=>x.id===selectedId.value)) selectedId.value=(schools.value.find(x=>!x.deactivated_at)||schools.value[0])?.id||''
 }
-onMounted(load)
+onMounted(async()=>{await load();if(route.query.tab==='requests')selectSection('requests');else await loadRequests()})
 async function addSchool(){
   clearMessages(); busy.value=true
   const r=await db.from('schools').insert({name:name.value.trim(),code:code.value.trim()||null}).select('id').single()
@@ -106,10 +157,30 @@ async function lifecycle(action:'deactivate'|'restore'|'delete'){
       <div>
         <div class="schools-breadcrumb"><NuxtLink to="/dashboard">Dashboard</NuxtLink><span>›</span><span>Administration</span><span>›</span><strong>Schools</strong></div>
         <h1><span class="schools-title-icon">▦</span> Schools</h1>
-        <p>Manage school profiles, verified email domains and access.</p>
+        <p>Manage school profiles, requests, verified email domains and access.</p>
       </div>
-      <button class="schools-primary" type="button" @click="showAddSchool = !showAddSchool">{{ showAddSchool ? 'Close' : '+ Add School' }}</button>
+      <button v-if="mainSection==='schools'" class="schools-primary" type="button" @click="showAddSchool = !showAddSchool">{{ showAddSchool ? 'Close' : '+ Add School' }}</button>
     </header>
+    <nav class="schools-main-tabs" aria-label="Schools sections">
+      <button type="button" :class="{'schools-main-active':mainSection==='schools'}" @click="selectSection('schools')">Schools</button>
+      <button type="button" :class="{'schools-main-active':mainSection==='requests'}" @click="selectSection('requests')">School Requests <span class="schools-request-count">{{ pendingRequests.length }}</span></button>
+    </nav>
+    <section v-if="mainSection==='requests'" class="schools-panel schools-requests-panel">
+      <div class="schools-panel-head"><div><h2>School Requests</h2><p class="schools-muted">Verify the school and its representative before approval. Approval does not automatically grant administrator access.</p></div><div class="schools-actions"><button class="schools-secondary" type="button" @click="requestFilter=requestFilter==='pending'?'all':'pending'">{{ requestFilter==='pending'?'Show All Requests':'Show Pending Only' }}</button><button class="schools-secondary" type="button" @click="loadRequests">Refresh</button></div></div>
+      <p v-if="requestError" class="schools-alert schools-error" role="alert">{{ requestError }}</p>
+      <p v-if="requestMessage" class="schools-alert schools-success" role="status">{{ requestMessage }}</p>
+      <p v-if="requestNotice" class="schools-alert schools-error" role="alert">{{ requestNotice }}</p>
+      <div v-for="r in shownRequests" :key="r.id" class="schools-request-card">
+        <div class="schools-request-head"><img v-if="requestLogos[r.id]" :src="requestLogos[r.id]" :alt="`${r.school_name} logo`" class="schools-request-logo"><div><h3>{{ r.school_name }}</h3><span class="schools-status" :class="r.status==='pending'?'schools-pending':r.status==='approved'?'schools-active':'schools-inactive'">{{ r.status }}</span><p class="schools-muted">Requested {{ r.created_at ? new Date(r.created_at).toLocaleDateString('en-AU') : '—' }}</p></div></div>
+        <div class="schools-request-facts"><div><span>Domain</span><strong>{{ r.school_domain || '—' }}</strong></div><div><span>Website</span><strong>{{ r.school_website || '—' }}</strong></div><div><span>Contact</span><strong>{{ r.contact_name }} · {{ r.contact_position || '—' }}</strong></div><div><span>Email</span><strong>{{ r.contact_email }}</strong></div><div><span>Phone</span><strong>{{ r.contact_phone || '—' }}</strong></div></div>
+        <p v-if="r.notes" class="schools-muted">Request notes: {{ r.notes }}</p>
+        <p v-if="r.review_notes" class="schools-muted">Review notes: {{ r.review_notes }}</p>
+        <template v-if="r.status==='pending'"><label class="schools-request-label">Private review notes<textarea v-model="requestNotes[r.id]" rows="2" placeholder="Verification details or reasons for the decision"></textarea></label><div class="schools-actions"><button class="schools-primary" type="button" :disabled="!!requestBusy || !!requestInviteBusy" @click="reviewRequest(r,true)">Approve School</button><button class="schools-danger-outline" type="button" :disabled="!!requestBusy || !!requestInviteBusy" @click="reviewRequest(r,false)">Reject Request</button></div></template>
+        <div v-if="r.status==='approved'" class="schools-request-invite"><h3>Invite first School Administrator</h3><p class="schools-muted">The invitation must be accepted by a verified account using the same email address.</p><label class="schools-request-label">Administrator email<input v-model="requestInviteEmails[r.id]" type="email" :placeholder="r.contact_email"></label><button class="schools-primary" type="button" :disabled="!!requestInviteBusy || !!requestBusy" @click="inviteRequest(r)">Send Invitation</button></div>
+      </div>
+      <p v-if="!shownRequests.length" class="schools-muted">{{requestFilter==='pending'?'No pending school requests.':'No school requests yet.'}}</p>
+    </section>
+    <template v-else>
     <p v-if="error" class="schools-alert schools-error" role="alert">{{ error }}</p>
     <p v-if="message" class="schools-alert schools-success" role="status">{{ message }}</p>
     <section v-if="showAddSchool" class="schools-panel schools-add">
@@ -157,8 +228,10 @@ async function lifecycle(action:'deactivate'|'restore'|'delete'){
       </section>
       <section v-else class="schools-panel schools-detail"><p class="schools-muted">Select a school to view its details.</p></section>
     </div>
+    </template>
   </div>
 </template>
 <style scoped>
 .schools-workspace{padding:28px;max-width:1600px;margin:auto;color:#f1f6ff}.schools-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:24px}.schools-breadcrumb{display:flex;gap:12px;align-items:center;color:#95b3d7;font-size:13px;margin-bottom:12px}.schools-breadcrumb a{color:#7ec4ff}.schools-heading h1{font-size:clamp(26px,3vw,38px);font-weight:800;margin:0;display:flex;align-items:center;gap:14px}.schools-title-icon,.schools-selected-avatar{display:grid;place-items:center;background:#0752b4;border-radius:12px;width:52px;height:52px;color:white}.schools-heading p,.schools-selected-header p{color:#9eb5d3;margin:8px 0 0}.schools-primary,.schools-secondary,.schools-danger,.schools-danger-outline{border:1px solid #37628e;border-radius:9px;padding:10px 16px;color:#eef6ff;background:#16365b;cursor:pointer;font-weight:650;white-space:nowrap}.schools-primary{background:#075bc9;border-color:#2276ec}.schools-danger{background:#a52c37;border-color:#c94d55}.schools-danger-outline{color:#ffb7bd;border-color:#8a4855;background:#422431}.schools-primary:disabled,.schools-secondary:disabled,.schools-danger:disabled,.schools-danger-outline:disabled{opacity:.45;cursor:not-allowed}.schools-panel,.schools-stat{background:linear-gradient(140deg,#102b4d,#0a1d37);border:1px solid #28527d;border-radius:14px;min-width:0}.schools-add{padding:22px;margin-bottom:20px}.schools-panel h2{font-size:19px;margin:0}.schools-panel h3{font-size:17px;margin:0 0 18px}.schools-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-bottom:20px}.schools-stat{display:flex;gap:18px;align-items:center;padding:20px}.schools-stat-icon{font-size:27px;color:#6cb7ff}.schools-stat strong{display:block;font-size:30px;line-height:1.1}.schools-stat span:last-child{display:block;color:#c2d3e8;margin-top:4px}.schools-layout{display:grid;grid-template-columns:minmax(280px,1fr) minmax(0,2fr);gap:20px;align-items:start}.schools-directory{padding:20px}.schools-detail{padding:24px;min-height:420px}.schools-panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.schools-panel-head span,.schools-muted{color:#a7bdd7}.schools-search,.schools-form input:not([type=checkbox]),.schools-danger-zone input{width:100%;min-width:0;background:#091b32;color:#f3f7ff;border:1px solid #3b5d81;border-radius:8px;padding:12px;box-sizing:border-box}.schools-check{display:flex!important;align-items:center;gap:10px;color:#b9cde6;font-size:13px;margin:14px 0}.schools-check input{width:auto!important;accent-color:#2185ff}.schools-list{display:grid;gap:9px;max-height:650px;overflow:auto}.schools-school{width:100%;display:flex;gap:12px;align-items:center;text-align:left;border:1px solid #294a70;border-radius:10px;background:#102844;padding:12px;color:#fff;cursor:pointer}.schools-school-active{background:#104582;border-color:#2888fa}.schools-school-avatar{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:9px;background:#0860c8;font-weight:800}.schools-school-info{flex:1;min-width:0}.schools-school-info strong,.schools-school-info small{display:block;overflow:hidden;text-overflow:ellipsis}.schools-school-info small{color:#aac2df;margin-top:3px}.schools-status{font-size:11px;padding:5px 8px;border-radius:20px}.schools-active{background:#164f40;color:#a9f2c6}.schools-inactive{background:#56393d;color:#ffbec1}.schools-selected-header{display:flex;gap:16px;align-items:center;margin-bottom:23px}.schools-selected-avatar{width:58px;height:58px;font-size:25px;font-weight:800}.schools-tabs{display:flex;gap:5px;border:1px solid #2d537c;background:#0b2340;border-radius:10px;padding:5px;overflow:auto}.schools-tabs button{flex:1;border:0;background:transparent;color:#c7d9ef;padding:13px 9px;border-radius:8px;white-space:nowrap;cursor:pointer;font-weight:650}.schools-tabs .schools-tab-active{background:#095bc9;color:white}.schools-tab-content{padding-top:25px}.schools-overview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:26px}.schools-overview-grid>div{border:1px solid #2a527d;border-radius:10px;padding:16px;background:#0b2543}.schools-overview-grid span{display:block;color:#a8bfdc;font-size:13px;margin-bottom:8px}.schools-overview-grid strong{font-size:19px}.schools-actions{display:flex;gap:9px;flex-wrap:wrap}.schools-form{display:grid;gap:16px;max-width:650px}.schools-form label,.schools-danger-zone label{display:grid;gap:7px;color:#d4e4f7}.schools-form .schools-check{display:flex}.schools-add-form{grid-template-columns:2fr 1fr auto;align-items:end;max-width:none}.schools-domain-form{grid-template-columns:1fr auto;align-items:end;margin-bottom:20px}.schools-domain{border-top:1px solid #294b70;padding:18px 0}.schools-domain p{color:#a7bfdc;font-size:13px;margin:6px 0 14px}.schools-primary-tag{display:inline-block;margin-left:10px;font-size:11px;border-radius:20px;background:#134d86;color:#c5e4ff;padding:3px 8px}.schools-danger-zone{margin:25px 0;padding:20px;border:1px solid #874955;border-radius:12px;background:#321f30}.schools-danger-zone p{color:#e8b8c0}.schools-danger-zone label{margin-bottom:14px}.schools-alert{padding:13px 17px;border-radius:9px;margin-bottom:18px}.schools-error{background:#492634;color:#ffc9cf}.schools-success{background:#1a493e;color:#b3f2ce}@media(max-width:1100px){.schools-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.schools-layout{grid-template-columns:1fr}.schools-list{max-height:300px}}@media(max-width:620px){.schools-workspace{padding:14px}.schools-heading{align-items:flex-start}.schools-heading h1{font-size:25px}.schools-heading .schools-primary{padding:10px}.schools-stats{gap:9px}.schools-stat{padding:13px;gap:9px}.schools-stat strong{font-size:23px}.schools-stat span:last-child{font-size:12px}.schools-detail,.schools-directory{padding:15px}.schools-add-form,.schools-domain-form,.schools-overview-grid{grid-template-columns:1fr}.schools-selected-header h2{font-size:19px}.schools-tabs button{flex:none}.schools-school{flex-wrap:wrap}}
+.schools-main-tabs{display:flex;gap:8px;margin:0 0 20px;border-bottom:1px solid #31577c;padding-bottom:9px}.schools-main-tabs button{border:0;background:transparent;color:#bcd4f1;padding:12px 18px;border-radius:9px;font-weight:700;cursor:pointer}.schools-main-tabs .schools-main-active{background:#075bc9;color:#fff}.schools-request-count{display:inline-block;margin-left:7px;background:#1b4c83;border-radius:20px;padding:2px 8px}.schools-requests-panel{padding:24px}.schools-request-card{border:1px solid #31577c;background:#0a2340;border-radius:12px;padding:20px;margin-top:16px}.schools-request-head{display:flex;align-items:center;gap:18px;margin-bottom:18px}.schools-request-logo{max-width:110px;max-height:90px;object-fit:contain}.schools-request-head h3{margin:0 0 8px}.schools-pending{background:#57431f;color:#ffe1a0}.schools-request-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}.schools-request-facts>div{min-width:0}.schools-request-facts span{display:block;color:#9fb8d7;font-size:12px;margin-bottom:5px}.schools-request-facts strong{overflow-wrap:anywhere}.schools-request-label{display:grid;gap:8px;color:#d4e4f7;margin:15px 0}.schools-request-label input,.schools-request-label textarea{width:100%;background:#091b32;color:#fff;border:1px solid #3b5d81;border-radius:8px;padding:12px;box-sizing:border-box}.schools-request-invite{margin-top:18px;padding:16px;border:1px solid #31577c;border-radius:10px}.schools-request-invite h3{margin-bottom:6px}@media(max-width:620px){.schools-request-facts{grid-template-columns:1fr}.schools-requests-panel{padding:14px}.schools-requests-panel .schools-panel-head{flex-wrap:wrap}.schools-main-tabs button{padding:10px}}
 </style>
