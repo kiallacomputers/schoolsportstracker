@@ -266,8 +266,8 @@ async function importCsv() {
     <p v-if="!busy && !filteredStudents.length">No students match your filters.</p>
   </section>
   <section v-else class="student-profile">
-    <button type="button" class="btn" @click="selectedStudent=null">← Back to Students</button>
     <div class="student-profile-header"><span class="student-tile-house" :style="{backgroundColor:houseFor(selectedStudent)?.colour || '#52647e'}">{{houseFor(selectedStudent)?.name?.charAt(0).toUpperCase() || '—'}}</span><div><h2>{{selectedStudent.given_name}} {{selectedStudent.family_name}}</h2><p>Year {{studentYear(selectedStudent)}} · {{houseFor(selectedStudent)?.name || 'No House'}}</p></div><span v-if="selectedStudent.is_active===false" class="student-inactive">Inactive</span></div>
+    <div class="student-profile-panel">
     <div class="student-profile-tabs" role="tablist" aria-label="Student profile sections"><button v-for="tab in profileTabs" :key="tab.id" type="button" role="tab" :aria-selected="profileTab===tab.id" :class="['student-profile-tab', {active:profileTab===tab.id}]" @click="profileTab=tab.id">{{tab.label}}</button></div>
     <div class="student-profile-content card" role="tabpanel">
       <p v-if="profileBusy">Loading sporting history…</p><p v-if="profileError" class="error">{{profileError}}</p>
@@ -277,6 +277,7 @@ async function importCsv() {
       <template v-else-if="profileTab==='results'"><h3>Results History</h3><div v-for="result in studentResults" :key="result.id" class="student-history-row"><strong>{{eventLabel(resultEvent(result))}}</strong><span>{{performanceLabel(result)}} · Place {{result.placing_position || '—'}} · {{result.published_at?'Published':'Unpublished'}}</span></div><p v-if="!profileBusy && !studentResults.length">No results recorded.</p></template>
       <template v-else-if="profileTab==='records'"><h3>Records Held</h3><p>Verified school and competition records will appear here once record tracking is configured. Event results are not automatically classified as records.</p></template>
       <template v-else><h3>Achievements</h3><p>Verified medals, awards and milestones will appear here when achievement tracking is configured.</p></template>
+    </div>
     </div>
   </section>
 </div></div>
@@ -309,6 +310,7 @@ async function importCsv() {
 .student-tile strong{font-size:.9rem;overflow-wrap:anywhere}.student-tile span:not(.student-tile-house){font-size:.8rem;color:#bdcde2}
 .student-tile-house{display:flex;align-items:center;justify-content:center;flex:0 0 48px;width:48px;height:48px;border-radius:9px;border:1px solid #ffffff66;font-weight:800;font-size:1.5rem;color:white;text-shadow:0 1px 3px #0008}
 .student-inactive{color:#ffce83!important;font-size:.75rem}.student-profile{display:flex;flex-direction:column;gap:1rem}.student-profile-header{justify-content:flex-start;background:#102440;border:1px solid #304c70;border-radius:14px;padding:1.25rem}.student-profile-header p{margin:.25rem 0 0;color:#b7cce4}
+.student-profile-panel{display:flex;flex-direction:column;gap:0;margin-top:0}
 .student-profile-tabs {
   --tab-curve: 12px;
   --shoulder-clearance: 6px;
@@ -391,6 +393,6 @@ async function importCsv() {
   --tab-stroke: #3c9cff;
   z-index: 10;
   color: #fff;
-}.student-profile-content{position:relative;z-index:0;min-height:200px}.student-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:1rem 0}.student-detail-grid>div{display:flex;flex-direction:column;gap:.25rem}.student-detail-grid small{color:#a8bfdc}.student-history-row{display:flex;flex-direction:column;gap:.25rem;padding:.85rem 0;border-bottom:1px solid #355272}.student-history-row span{color:#b7cce4;font-size:.9rem}
+}.student-profile-content{position:relative;z-index:0;min-height:200px;border-top-left-radius:0;margin-top:0}.student-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:1rem 0}.student-detail-grid>div{display:flex;flex-direction:column;gap:.25rem}.student-detail-grid small{color:#a8bfdc}.student-history-row{display:flex;flex-direction:column;gap:.25rem;padding:.85rem 0;border-bottom:1px solid #355272}.student-history-row span{color:#b7cce4;font-size:.9rem}
 @media(max-width:1100px){.student-tile-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:700px){.student-directory-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.student-tile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.student-profile-tabs{overflow-x:auto;overflow-y:visible;gap:15px}.student-profile-tab{font-size:.8rem;padding:.6rem .75rem}}@media(max-width:420px){.student-tile-grid{grid-template-columns:1fr 1fr}.student-detail-grid{grid-template-columns:1fr}}
 </style>
