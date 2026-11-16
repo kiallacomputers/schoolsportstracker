@@ -181,6 +181,7 @@ async function lifecycle(action:'deactivate'|'restore'|'delete'){
       <button type="button" :class="{'schools-main-active':mainSection==='requests'}" @click="selectSection('requests')"><span aria-hidden="true">▤</span> School Requests <span class="schools-request-count">{{ pendingRequests.length }}</span></button>
       <button type="button" :class="{'schools-main-active':mainSection==='email'}" @click="selectSection('email')"><span aria-hidden="true">✉</span> Email Settings</button>
     </nav>
+    <div class="schools-page-surface">
     <section v-if="mainSection==='email'" class="schools-panel schools-requests-panel schools-email-panel">
       <div class="schools-panel-head"><div><h2>Email Settings</h2><p class="schools-muted">Platform-wide Microsoft Graph email delivery for School Sports Tracker.</p></div></div>
       <div class="schools-email-info"><span>Sender mailbox</span><strong>sportstracker@kiallacomputers.com.au</strong><p class="schools-muted">The sending mailbox is configured using the Netlify environment variable MICROSOFT_SENDER_EMAIL.</p></div>
@@ -258,109 +259,90 @@ async function lifecycle(action:'deactivate'|'restore'|'delete'){
       <section v-else class="schools-panel schools-detail"><p class="schools-muted">Select a school to view its details.</p></section>
     </div>
     </template>
+    </div>
   </div>
 </template>
 <style scoped>
 .schools-workspace{padding:28px;max-width:1600px;margin:auto;color:#f1f6ff}.schools-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:24px}.schools-breadcrumb{display:flex;gap:12px;align-items:center;color:#95b3d7;font-size:13px;margin-bottom:12px}.schools-breadcrumb a{color:#7ec4ff}.schools-heading h1{font-size:clamp(26px,3vw,38px);font-weight:800;margin:0;display:flex;align-items:center;gap:14px}.schools-title-icon,.schools-selected-avatar{display:grid;place-items:center;background:#0752b4;border-radius:12px;width:52px;height:52px;color:white}.schools-heading p,.schools-selected-header p{color:#9eb5d3;margin:8px 0 0}.schools-primary,.schools-secondary,.schools-danger,.schools-danger-outline{border:1px solid #37628e;border-radius:9px;padding:10px 16px;color:#eef6ff;background:#16365b;cursor:pointer;font-weight:650;white-space:nowrap}.schools-primary{background:#075bc9;border-color:#2276ec}.schools-danger{background:#a52c37;border-color:#c94d55}.schools-danger-outline{color:#ffb7bd;border-color:#8a4855;background:#422431}.schools-primary:disabled,.schools-secondary:disabled,.schools-danger:disabled,.schools-danger-outline:disabled{opacity:.45;cursor:not-allowed}.schools-panel,.schools-stat{background:linear-gradient(140deg,#102b4d,#0a1d37);border:1px solid #28527d;border-radius:14px;min-width:0}.schools-add{padding:22px;margin-bottom:20px}.schools-panel h2{font-size:19px;margin:0}.schools-panel h3{font-size:17px;margin:0 0 18px}.schools-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-bottom:20px}.schools-stat{display:flex;gap:18px;align-items:center;padding:20px}.schools-stat-icon{font-size:27px;color:#6cb7ff}.schools-stat strong{display:block;font-size:30px;line-height:1.1}.schools-stat span:last-child{display:block;color:#c2d3e8;margin-top:4px}.schools-layout{display:grid;grid-template-columns:minmax(280px,1fr) minmax(0,2fr);gap:20px;align-items:start}.schools-directory{padding:20px}.schools-detail{padding:24px;min-height:420px}.schools-panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.schools-panel-head span,.schools-muted{color:#a7bdd7}.schools-search,.schools-form input:not([type=checkbox]),.schools-danger-zone input{width:100%;min-width:0;background:#091b32;color:#f3f7ff;border:1px solid #3b5d81;border-radius:8px;padding:12px;box-sizing:border-box}.schools-check{display:flex!important;align-items:center;gap:10px;color:#b9cde6;font-size:13px;margin:14px 0}.schools-check input{width:auto!important;accent-color:#2185ff}.schools-list{display:grid;gap:9px;max-height:650px;overflow:auto}.schools-school{width:100%;display:flex;gap:12px;align-items:center;text-align:left;border:1px solid #294a70;border-radius:10px;background:#102844;padding:12px;color:#fff;cursor:pointer}.schools-school-active{background:#104582;border-color:#2888fa}.schools-school-avatar{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:9px;background:#0860c8;font-weight:800}.schools-school-info{flex:1;min-width:0}.schools-school-info strong,.schools-school-info small{display:block;overflow:hidden;text-overflow:ellipsis}.schools-school-info small{color:#aac2df;margin-top:3px}.schools-status{font-size:11px;padding:5px 8px;border-radius:20px}.schools-active{background:#164f40;color:#a9f2c6}.schools-inactive{background:#56393d;color:#ffbec1}.schools-selected-header{display:flex;gap:16px;align-items:center;margin-bottom:23px}.schools-selected-avatar{width:58px;height:58px;font-size:25px;font-weight:800}.schools-tabs{display:flex;gap:5px;border:1px solid #2d537c;background:#0b2340;border-radius:10px;padding:5px;overflow:auto}.schools-tabs button{flex:1;border:0;background:transparent;color:#c7d9ef;padding:13px 9px;border-radius:8px;white-space:nowrap;cursor:pointer;font-weight:650}.schools-tabs .schools-tab-active{background:#095bc9;color:white}.schools-tab-content{padding-top:25px}.schools-overview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:26px}.schools-overview-grid>div{border:1px solid #2a527d;border-radius:10px;padding:16px;background:#0b2543}.schools-overview-grid span{display:block;color:#a8bfdc;font-size:13px;margin-bottom:8px}.schools-overview-grid strong{font-size:19px}.schools-actions{display:flex;gap:9px;flex-wrap:wrap}.schools-form{display:grid;gap:16px;max-width:650px}.schools-form label,.schools-danger-zone label{display:grid;gap:7px;color:#d4e4f7}.schools-form .schools-check{display:flex}.schools-add-form{grid-template-columns:2fr 1fr auto;align-items:end;max-width:none}.schools-domain-form{grid-template-columns:1fr auto;align-items:end;margin-bottom:20px}.schools-domain{border-top:1px solid #294b70;padding:18px 0}.schools-domain p{color:#a7bfdc;font-size:13px;margin:6px 0 14px}.schools-primary-tag{display:inline-block;margin-left:10px;font-size:11px;border-radius:20px;background:#134d86;color:#c5e4ff;padding:3px 8px}.schools-danger-zone{margin:25px 0;padding:20px;border:1px solid #874955;border-radius:12px;background:#321f30}.schools-danger-zone p{color:#e8b8c0}.schools-danger-zone label{margin-bottom:14px}.schools-alert{padding:13px 17px;border-radius:9px;margin-bottom:18px}.schools-error{background:#492634;color:#ffc9cf}.schools-success{background:#1a493e;color:#b3f2ce}@media(max-width:1100px){.schools-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.schools-layout{grid-template-columns:1fr}.schools-list{max-height:300px}}@media(max-width:620px){.schools-workspace{padding:14px}.schools-heading{align-items:flex-start}.schools-heading h1{font-size:25px}.schools-heading .schools-primary{padding:10px}.schools-stats{gap:9px}.schools-stat{padding:13px;gap:9px}.schools-stat strong{font-size:23px}.schools-stat span:last-child{font-size:12px}.schools-detail,.schools-directory{padding:15px}.schools-add-form,.schools-domain-form,.schools-overview-grid{grid-template-columns:1fr}.schools-selected-header h2{font-size:19px}.schools-tabs button{flex:none}.schools-school{flex-wrap:wrap}}
-/* Folder-style navigation: each button owns its shoulders and stacking layer. */
+/* Compact folder tabs: the active tab blends into the page surface.
+   The inverted bottom corners are formed by the two outer pseudo-elements. */
 .schools-main-tabs {
-  --tab-curve: 12px;
-  --shoulder-clearance: 6px;
+  --tab-curve: 14px;
   display: flex;
-  align-items: flex-end;
+  align-items: end;
   justify-content: flex-start;
-  gap: calc((2 * var(--tab-curve) + var(--shoulder-clearance)) / 2);
-  margin: 0 0 20px;
-  padding: 0 var(--tab-curve);
-  border-bottom: 1px solid #3675b6;
+  gap: 12px;
+  padding: 0 28px;
+  margin: 0;
+  border-bottom: 1px solid #3289e8;
   isolation: isolate;
   overflow: visible;
 }
 .schools-main-tabs > button {
-  --tab-fill: #0b2340;
-  --tab-stroke: #345f8c;
   position: relative;
   z-index: 1;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   width: max-content;
   min-width: 0;
+  padding: 13px 22px;
   margin: 0 0 -1px;
-  padding: 11px 18px 12px;
-  border: 1px solid var(--tab-stroke);
-  border-bottom: 0;
-  border-radius: 15px 15px 0 0;
-  background: var(--tab-fill);
-  color: #c9d9ee;
-  font-size: 13px;
-  font-weight: 650;
+  border: 1px solid #315f90;
+  border-bottom: 1px solid #3289e8;
+  border-radius: 24px 24px 0 0;
+  background: #0c2544;
+  color: #d5e6fb;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
   white-space: nowrap;
   cursor: pointer;
-  overflow: visible;
 }
-/* Inverse quarter-circle shoulders: radial gradients paint both the 1px
-   curved outline and the tab fill. Each shoulder is part of its own button. */
-.schools-main-tabs > button::before,
-.schools-main-tabs > button::after {
+.schools-main-tabs > button:hover:not(.schools-main-active) { background: #173a63; color: white; }
+.schools-main-tabs > button:focus-visible { outline: 2px solid #b4dfff; outline-offset: 3px; }
+.schools-main-tabs > button.schools-main-active {
+  z-index: 5;
+  background: #0965d5;
+  border-color: #58a8ff;
+  border-bottom-color: #0965d5;
+  color: white;
+}
+.schools-main-tabs > button.schools-main-active::before,
+.schools-main-tabs > button.schools-main-active::after {
   content: '';
   position: absolute;
-  bottom: 0;
+  bottom: -1px;
   width: var(--tab-curve);
   height: var(--tab-curve);
   pointer-events: none;
   background-repeat: no-repeat;
 }
-.schools-main-tabs > button::before {
+.schools-main-tabs > button.schools-main-active::before {
   left: calc(-1 * var(--tab-curve));
-  background-image: radial-gradient(circle at top left,
-    transparent calc(var(--tab-curve) - 1px),
-    var(--tab-stroke) calc(var(--tab-curve) - 0.5px),
-    var(--tab-stroke) var(--tab-curve),
-    var(--tab-fill) calc(var(--tab-curve) + 0.5px));
+  background: radial-gradient(circle at 0 0, transparent calc(var(--tab-curve) - 1.4px), #58a8ff calc(var(--tab-curve) - 1px), #0965d5 var(--tab-curve));
 }
-.schools-main-tabs > button::after {
+.schools-main-tabs > button.schools-main-active::after {
   right: calc(-1 * var(--tab-curve));
-  background-image: radial-gradient(circle at top right,
-    transparent calc(var(--tab-curve) - 1px),
-    var(--tab-stroke) calc(var(--tab-curve) - 0.5px),
-    var(--tab-stroke) var(--tab-curve),
-    var(--tab-fill) calc(var(--tab-curve) + 0.5px));
+  background: radial-gradient(circle at 100% 0, transparent calc(var(--tab-curve) - 1.4px), #58a8ff calc(var(--tab-curve) - 1px), #0965d5 var(--tab-curve));
 }
-.schools-main-tabs > button:hover:not(.schools-main-active) {
-  --tab-fill: #153657;
-  z-index: 2;
-  color: #fff;
+.schools-request-count { display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 5px;border-radius:20px;background:#235b98;color:#fff;font-size:12px; }
+.schools-main-active .schools-request-count { background:#ffffff35; }
+.schools-page-surface {
+  border: 1px solid #3289e8;
+  border-top: 0;
+  border-radius: 0 0 22px 22px;
+  background: linear-gradient(145deg, #082342, #07182f);
+  padding: 28px 20px 22px;
+  min-height: 460px;
 }
-.schools-main-tabs > button:focus-visible {
-  outline: 2px solid #a4d8ff;
-  outline-offset: 3px;
-  z-index: 12;
-}
-.schools-main-tabs > button.schools-main-active {
-  --tab-fill: #0865d6;
-  --tab-stroke: #3c9cff;
-  z-index: 10;
-  color: #fff;
-}
-.schools-request-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
-  border-radius: 20px;
-  background: #235b98;
-  color: #fff;
-  font-size: 11px;
-}
-.schools-main-active .schools-request-count { background: #ffffff30; }
-@media (max-width: 720px) {
-  .schools-main-tabs { overflow-x: auto; overflow-y: hidden; padding: 0 14px; scrollbar-width: thin; }
-  .schools-main-tabs > button { padding: 10px 13px 11px; font-size: 12px; }
+.schools-page-surface > .schools-requests-panel { max-width: none; }
+@media(max-width:720px) {
+  .schools-main-tabs { gap: 9px; padding: 0 18px; overflow-x: auto; overflow-y: clip; scrollbar-width: thin; }
+  .schools-main-tabs > button { padding: 11px 15px; font-size: 12px; border-radius: 16px 16px 0 0; }
+  .schools-page-surface { padding: 16px 12px; }
 }
 .schools-requests-panel{padding:24px}.schools-request-card{border:1px solid #31577c;background:#0a2340;border-radius:12px;padding:20px;margin-top:16px}.schools-request-head{display:flex;align-items:center;gap:18px;margin-bottom:18px}.schools-request-logo{max-width:110px;max-height:90px;object-fit:contain}.schools-request-head h3{margin:0 0 8px}.schools-pending{background:#57431f;color:#ffe1a0}.schools-request-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}.schools-request-facts>div{min-width:0}.schools-request-facts span{display:block;color:#9fb8d7;font-size:12px;margin-bottom:5px}.schools-request-facts strong{overflow-wrap:anywhere}.schools-request-label{display:grid;gap:8px;color:#d4e4f7;margin:15px 0}.schools-request-label input,.schools-request-label textarea{width:100%;background:#091b32;color:#fff;border:1px solid #3b5d81;border-radius:8px;padding:12px;box-sizing:border-box}.schools-request-invite{margin-top:18px;padding:16px;border:1px solid #31577c;border-radius:10px}.schools-request-invite h3{margin-bottom:6px}@media(max-width:620px){.schools-request-facts{grid-template-columns:1fr}.schools-requests-panel{padding:14px}.schools-requests-panel .schools-panel-head{flex-wrap:wrap}.schools-main-tabs button{padding:10px}}
 .schools-email-panel{max-width:900px}.schools-email-info{padding:18px;border:1px solid #31577c;background:#0a2340;border-radius:10px;margin:18px 0 24px}.schools-email-info span{display:block;color:#9fb8d7;font-size:13px;margin-bottom:7px}.schools-email-info strong{overflow-wrap:anywhere}.schools-email-info p{margin:10px 0 0}.schools-email-form{margin:15px 0 20px}.schools-email-form button{justify-self:start}.schools-email-note{margin-top:26px;line-height:1.6}
