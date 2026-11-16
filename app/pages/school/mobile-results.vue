@@ -91,7 +91,7 @@ onMounted(load)
 </script>
 <template>
   <div class="mobile-results">
-    <div class="mobile-results-heading">
+    <div class="mobile-results-heading sports-page-heading">
       <NuxtLink :to="{path:'/school/competitions',query:{school}}">← Competitions</NuxtLink>
       <h1>Enter Results</h1>
       <p>Touch-friendly entry for swimming, running and field events.</p>
