@@ -58,3 +58,51 @@
   .sports-page-heading { min-height: 120px; }
   .sports-page-heading::before { opacity: .45; }
 }
+
+
+/* V2 shared layout: solid navy, no page/card colour gradients. */
+:root { --sst-page-navy: #07172c; --sst-panel-navy: #102541; }
+html, body, #__nuxt { min-height: 100%; background-color: var(--sst-page-navy); }
+/* Do not alter the landing/login screen styling; scope management changes to the workspace. */
+.workspace, .workspace .content, .workspace .page {
+  background-color: var(--sst-page-navy);
+  background-image: none;
+}
+/* Workspace width is 90% of the available content area after the sidebar. */
+.workspace .content > .page {
+  width: 90%;
+  max-width: none;
+  margin-inline: auto;
+  padding-inline: 0;
+  box-sizing: border-box;
+}
+/* Remove decorative blue gradients from cards and hero panels; retain functional
+   colour pickers, house colours, and the embossed header image. */
+.workspace .page .competition-hero,
+.workspace .page .card,
+.workspace .page .stat-card,
+.workspace .page .metric-card {
+  background-image: none !important;
+}
+.workspace .page .competition-hero { background-color: var(--sst-panel-navy) !important; }
+/* Make page sections fill their 90%-wide workspace rather than imposing old caps. */
+.workspace .page > :is(.admin-section, .dashboard-main, .shell),
+.workspace .page .admin-section {
+  width: 100%;
+  max-width: none;
+}
+/* Keep the approved embossed sports header; remove its colour-gradient overlay.
+   Its vertical fade is a transparency mask, not a background colour gradient. */
+.workspace .admin-section::before {
+  background-image: url('/images/sports-embossed-header.webp');
+  background-position: right center;
+  background-size: cover;
+}
+.workspace .sports-page-heading::before {
+  background-image: url('/images/sports-embossed-header.webp');
+  background-position: right center;
+  background-size: cover;
+}
+@media (max-width: 800px) {
+  .workspace .content > .page { width: 94%; }
+}
