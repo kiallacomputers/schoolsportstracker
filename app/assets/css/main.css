@@ -118,12 +118,12 @@ html, body, #__nuxt { min-height: 100%; background-color: var(--sst-page-navy); 
   min-height: calc(100vh - 82px);
   background-color: #07172c;
   background-image:
-    linear-gradient(to bottom, rgba(7,23,44,.10) 0%, rgba(7,23,44,.28) 46%, #07172c 460px),
+    linear-gradient(to bottom, rgba(7,23,44,.10) 0%, rgba(7,23,44,.42) 40%, #07172c 100%),
     linear-gradient(to right, rgba(7,23,44,.73), rgba(7,23,44,.08)),
     url('/images/sports-embossed-header.webp');
   background-repeat: no-repeat;
   background-position: top center, top center, top center;
-  background-size: 100% 470px, 100% 470px, cover;
+  background-size: 100% 360px, 100% 360px, 100% 360px;
 }
 .workspace .content > main.page.competition-workspace-background > .competition-page {
   width: 100%;
@@ -147,7 +147,7 @@ html, body, #__nuxt { min-height: 100%; background-color: var(--sst-page-navy); 
 }
 @media(max-width:760px) {
   .workspace .content > main.page.competition-workspace-background {
-    background-size: 100% 380px, 100% 380px, auto 380px;
+    background-size: 100% 300px, 100% 300px, auto 300px;
     background-position: top center, top center, top right;
   }
   .workspace .content > main.page.competition-workspace-background .competition-shell {
