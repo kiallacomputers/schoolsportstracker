@@ -118,18 +118,35 @@ async function loadEvents() {
   await loadMetrics()
 }
 async function loadMetrics(){
-  entries.value=[];roundsCount.value=null;resultCount.value=null
+  entries.value=[]; roundsCount.value=null; resultCount.value=null
   const ids=events.value.map(e=>e.id)
-  if(!ids.length)return
-  // Use canonical entries, never the retired student_event_registrations table.
-  const entryRes=await db.from('event_entries').select('id,event_id').in('event_id',ids).limit(10000)
-  if(!entryRes.error)entries.value=entryRes.data||[]
-  // Optional metrics: hide unavailable figures rather than inventing zeros.
-  const roundRes=await db.from('race_rounds').select('id',{count:'exact',head:true}).in('event_id',ids)
-  if(!roundRes.error)roundsCount.value=roundRes.count??0
-  const resultRes=await db.from('event_results').select('id',{count:'exact',head:true}).in('event_id',ids)
-  if(!resultRes.error)resultCount.value=resultRes.count??0
+  if(!ids.length){roundsCount.value=0;resultCount.value=0;return}
+  // Canonical registration records use competition_event_id, not event_id.
+  // A failed read must never be presented as a valid zero registration count.
+  const entryRes=await db.from('event_entries')
+    .select('id,competition_event_id').in('competition_event_id',ids).limit(10000)
+  if(entryRes.error) throw new Error(`Unable to load registrations: ${entryRes.error.message}`)
+  if((entryRes.data?.length??0)===10000) throw new Error('Registration count reached the 10,000-row safety limit. Contact the administrator for paginated totals.')
+  entries.value=(entryRes.data||[]).map(row=>({id:row.id,event_id:row.competition_event_id}))
+
+  // Generated race rounds are linked by competition_event_id.
+  const roundRes=await db.from('race_rounds').select('id',{count:'exact',head:true})
+    .in('competition_event_id',ids)
+  if(roundRes.error) throw new Error(`Unable to load race rounds: ${roundRes.error.message}`)
+  roundsCount.value=roundRes.count??0
+
+  // Event results link to event_rounds via round_id; event_results has no event_id.
+  const eventRoundRes=await db.from('event_rounds').select('id')
+    .in('competition_event_id',ids).limit(10000)
+  if(eventRoundRes.error) throw new Error(`Unable to load result rounds: ${eventRoundRes.error.message}`)
+  const roundIds=(eventRoundRes.data||[]).map(r=>r.id)
+  if(!roundIds.length){resultCount.value=0;return}
+  const resultRes=await db.from('event_results').select('id',{count:'exact',head:true})
+    .in('round_id',roundIds)
+  if(resultRes.error) throw new Error(`Unable to load results: ${resultRes.error.message}`)
+  resultCount.value=resultRes.count??0
 }
+
 watch(showAllCompetitions,()=>{if(!visibleCompetitions.value.some(c=>c.id===selected.value))selected.value=visibleCompetitions.value[0]?.id||''})
 watch(()=>route.query.school,()=>load())
 watch(selected,async()=>{
@@ -140,7 +157,7 @@ watch(selected,async()=>{
     cutoffForm.value={mode:c.age_cutoff_mode||'calendar_year',custom:c.age_cutoff_date||''}
   }
   eventForm.value=emptyEvent()
-  if(!loading.value) {try {await loadEvents()}catch(e:any){error.value=e.message}}
+  if(!loading.value) {try {await loadEvents()}catch(e:any){error.value=e.message||'Unable to load competition statistics'}}
 })
 function toLocalInput(value:string|null|undefined) {
   if(!value)return ''
