@@ -118,6 +118,7 @@ async function loadEvents() {
   await loadMetrics()
 }
 async function loadMetrics(){
+  error.value=''
   entries.value=[]; roundsCount.value=null; resultCount.value=null
   const ids=events.value.map(e=>e.id)
   if(!ids.length){roundsCount.value=0;resultCount.value=0;return}
@@ -129,22 +130,30 @@ async function loadMetrics(){
   if((entryRes.data?.length??0)===10000) throw new Error('Registration count reached the 10,000-row safety limit. Contact the administrator for paginated totals.')
   entries.value=(entryRes.data||[]).map(row=>({id:row.id,event_id:row.competition_event_id}))
 
-  // Generated race rounds are linked by competition_event_id.
-  const roundRes=await db.from('race_rounds').select('id',{count:'exact',head:true})
-    .in('competition_event_id',ids)
-  if(roundRes.error) throw new Error(`Unable to load race rounds: ${roundRes.error.message}`)
-  roundsCount.value=roundRes.count??0
-
-  // Event results link to event_rounds via round_id; event_results has no event_id.
-  const eventRoundRes=await db.from('event_rounds').select('id')
-    .in('competition_event_id',ids).limit(10000)
-  if(eventRoundRes.error) throw new Error(`Unable to load result rounds: ${eventRoundRes.error.message}`)
-  const roundIds=(eventRoundRes.data||[]).map(r=>r.id)
-  if(!roundIds.length){resultCount.value=0;return}
-  const resultRes=await db.from('event_results').select('id',{count:'exact',head:true})
-    .in('round_id',roundIds)
-  if(resultRes.error) throw new Error(`Unable to load results: ${resultRes.error.message}`)
-  resultCount.value=resultRes.count??0
+  // Use the same authorised RPC as the Event Day screen. Direct table reads
+  // may fail because race data is exposed through SECURITY DEFINER functions.
+  const uniqueRounds = new Set<string>()
+  const recordedResults = new Set<string>()
+  for (const eventId of ids) {
+    const { data: raceRows, error: raceError } = await db.rpc('school_race_rounds', {
+      p_school: schoolId.value,
+      p_event: eventId
+    })
+    if (raceError) throw new Error(`Unable to load Event Day rounds: ${raceError.message}`)
+    for (const row of raceRows || []) {
+      if (!row.round_id) continue
+      uniqueRounds.add(String(row.round_id))
+      // The Event Day RPC reports a result_status for each competitor. A
+      // pending result has not yet been entered, even if a lane is assigned.
+      if (row.entry_id && row.result_status && row.result_status !== 'pending') {
+        recordedResults.add(`${row.round_id}:${row.entry_id}`)
+      } else if (row.entry_id && row.time_ms != null) {
+        recordedResults.add(`${row.round_id}:${row.entry_id}`)
+      }
+    }
+  }
+  roundsCount.value = uniqueRounds.size
+  resultCount.value = recordedResults.size
 }
 
 watch(showAllCompetitions,()=>{if(!visibleCompetitions.value.some(c=>c.id===selected.value))selected.value=visibleCompetitions.value[0]?.id||''})
