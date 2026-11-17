@@ -24,6 +24,70 @@ async function loadComments(id:string){const {data,error:e}=await db.from('manag
 async function createIssue(){if(busy.value)return;error.value='';success.value='';if(draft.title.trim().length<3){error.value='Enter a title of at least 3 characters.';return}busy.value=true;try{const {data:{user}}=await db.auth.getUser();if(!user)throw new Error('Sign in again.');const {data,error:e}=await db.from('management_issues').insert({title:draft.title.trim(),description:draft.description.trim(),category:draft.category,priority:draft.priority,area:draft.area.trim()||'General',assigned_to:draft.assigned_to.trim(),created_by:user.id}).select('*').single();if(e)throw e;showCreate.value=false;Object.assign(draft,{title:'',description:'',category:'improvement',priority:'medium',area:'General',assigned_to:''});await load();success.value='Issue created.'}catch(e:any){error.value=e.message||'Unable to create issue.'}finally{busy.value=false}}
 async function saveIssue(){if(!selected.value||busy.value)return;error.value='';success.value='';busy.value=true;try{const {data:{user}}=await db.auth.getUser();if(!user)throw new Error('Sign in again.');const {error:e}=await db.from('management_issues').update({title:edit.title.trim(),description:edit.description.trim(),category:edit.category,priority:edit.priority,status:edit.status,area:edit.area.trim()||'General',assigned_to:edit.assigned_to.trim(),resolution:edit.resolution.trim(),updated_by:user.id}).eq('id',selected.value.id);if(e)throw e;const id=selected.value.id;await load();const updated=issues.value.find(x=>x.id===id);selected.value=null;success.value='Changes saved.'}catch(e:any){error.value=e.message||'Unable to save changes.'}finally{busy.value=false}}
 async function addComment(){if(!selected.value||!newComment.value.trim()||busy.value)return;error.value='';busy.value=true;try{const {data:{user}}=await db.auth.getUser();if(!user)throw new Error('Sign in again.');const {error:e}=await db.from('management_issue_comments').insert({issue_id:selected.value.id,comment:newComment.value.trim(),created_by:user.id});if(e)throw e;newComment.value='';await loadComments(selected.value.id)}catch(e:any){error.value=e.message||'Unable to add comment.'}finally{busy.value=false}}
+
+const exporting = ref(false)
+async function exportIssue() {
+  if (!selected.value || exporting.value) return
+  exporting.value = true
+  error.value = ''
+  try {
+    // Fetch fresh saved values and every comment so the export is complete.
+    const issueId = selected.value.id
+    const { data: issue, error: issueError } = await db.from('management_issues')
+      .select('*').eq('id', issueId).single()
+    if (issueError) throw issueError
+    const { data: notes, error: notesError } = await db.from('management_issue_comments')
+      .select('comment,created_at,created_by').eq('issue_id', issueId)
+      .order('created_at', { ascending: true })
+    if (notesError) throw notesError
+    const clean = (value: unknown) => String(value ?? '').trim()
+    const item = issue as Issue
+    const lines = [
+      `# School Sports Tracker V2 — Issue #${item.reference_number}`,
+      '',
+      `**Title:** ${clean(item.title)}`,
+      `**Type:** ${label(clean(item.category))}`,
+      `**Priority:** ${label(clean(item.priority))}`,
+      `**Status:** ${label(clean(item.status))}`,
+      `**Area:** ${clean(item.area)}`,
+      `**Assigned to:** ${clean(item.assigned_to) || 'Unassigned'}`,
+      `**Created:** ${clean(item.created_at)}`,
+      `**Updated:** ${clean(item.updated_at)}`,
+      `**Issue ID:** ${clean(item.id)}`,
+      '',
+      '## Description',
+      '',
+      clean(item.description) || '(No description)',
+      '',
+      '## Resolution / Outcome',
+      '',
+      clean(item.resolution) || '(Not yet resolved)',
+      '',
+      '## Comments & Progress Updates',
+      ''
+    ]
+    if (!notes?.length) lines.push('(No comments recorded)', '')
+    for (const note of notes ?? []) {
+      lines.push(`### ${clean(note.created_at)}`, '', clean(note.comment), '')
+    }
+    lines.push('---', '', 'Exported from the School Sports Tracker V2 Improvements & Faults Log.',
+      'This export is a snapshot. Review the current issue before applying changes.', '')
+    const blob = new Blob([lines.join('\\n')], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `SST-Issue-${item.reference_number}.md`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch (e: any) {
+    error.value = e?.message || 'Unable to export issue.'
+  } finally {
+    exporting.value = false
+  }
+}
+
 function closeModal(){if(busy.value)return;showCreate.value=false;selected.value=null;error.value=''}
 function onEscape(event:KeyboardEvent){if(event.key==='Escape')closeModal()}
 watch([showCreate,selected],()=>{if(import.meta.client)document.body.style.overflow=(showCreate.value||selected.value)?'hidden':''})
@@ -70,7 +134,10 @@ onBeforeUnmount(()=>{window.removeEventListener('keydown',onEscape);document.bod
         <section class="issue-modal" role="dialog" aria-modal="true" :aria-label="showCreate?'New Item':`Item #${selected?.reference_number}`">
           <div class="modal-heading">
             <div><div class="eyebrow">{{showCreate?'NEW MANAGEMENT ITEM':'ISSUE DETAILS'}}</div><h2>{{showCreate?'Create New Item':`Item #${selected?.reference_number}`}}</h2></div>
-            <button class="modal-close" aria-label="Close window" @click="closeModal">✕</button>
+            <div class="modal-heading-actions">
+              <button v-if="selected" class="export-button" type="button" :disabled="exporting" @click="exportIssue">{{ exporting ? 'Exporting…' : '↓ Export Issue' }}</button>
+              <button class="modal-close" aria-label="Close window" @click="closeModal">✕</button>
+            </div>
           </div>
           <div class="modal-content">
             <div v-if="error" class="alert" role="alert">{{error}}</div>
@@ -125,4 +192,12 @@ onBeforeUnmount(()=>{window.removeEventListener('keydown',onEscape);document.bod
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;padding-top:8px}
 @media(max-width:900px){.issue-list{grid-template-columns:1fr}}
 @media(max-width:650px){.hero{margin:-12px -12px 18px;padding:22px 16px 42px}.hero-content{align-items:flex-start;flex-direction:column}.issue-modal-backdrop{padding:8px;align-items:flex-end}.issue-modal{max-height:96dvh;border-radius:16px 16px 0 0}.modal-heading,.modal-content{padding:16px}}
+</style>
+
+<style scoped>
+.modal-heading-actions{display:flex;align-items:center;gap:10px}
+.export-button{border:1px solid #75a9dc;background:#205c98;color:#fff;border-radius:9px;padding:10px 14px;cursor:pointer;font:inherit;font-weight:650;white-space:nowrap}
+.export-button:hover:not(:disabled){background:#2b76bd}
+.export-button:disabled{opacity:.6;cursor:wait}
+@media(max-width:440px){.modal-heading-actions{gap:5px}.export-button{padding:8px;font-size:12px}.modal-close{padding:8px}}
 </style>
