@@ -170,7 +170,7 @@ onBeforeUnmount(()=>{window.removeEventListener('keydown',onEscape);document.bod
 .issues-page{color:#eaf3ff;max-width:1600px;margin:auto}.crumb{font-size:12px;color:#78b8ff;margin-bottom:18px}.crumb span{padding:0 10px;color:#7993b2}.eyebrow{color:#73b9ff;letter-spacing:2px;font-size:10px;font-weight:700}.heading{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:24px}.heading h1{font-size:clamp(25px,3vw,34px);margin:6px 0}.heading p{color:#a9c6e7;margin:0}.primary,.subtle{cursor:pointer;border-radius:9px;padding:11px 16px;font-weight:700}.primary{background:#0964cf;color:white;border:1px solid #3a95ff}.subtle{background:#173557;color:#dbeaff;border:1px solid #38618e}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:20px}.metric,.panel{background:linear-gradient(140deg,#112e51,#0b213e);border:1px solid #315e8c;border-radius:14px}.metric{padding:18px 20px}.metric span{font-size:12px;color:#a9c9ed;display:block}.metric strong{font-size:32px;display:block;margin-top:7px}.workgrid{display:grid;grid-template-columns:minmax(300px,1fr) minmax(350px,1.2fr);gap:16px}.panel{padding:18px;min-width:0}.panel-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:15px}.panel h2{font-size:19px;margin:0}.filters{display:grid;grid-template-columns:1fr 145px 125px;gap:8px;margin-bottom:15px}.issues-page input,.issues-page select,.issues-page textarea{width:100%;box-sizing:border-box;background:#091c33;color:#f4f9ff;border:1px solid #42678e;border-radius:8px;padding:11px;font:inherit;min-width:0}.issues-page input:focus,.issues-page select:focus,.issues-page textarea:focus{outline:2px solid #4a9dff;outline-offset:1px}.issue-list{display:flex;flex-direction:column;gap:8px;max-height:680px;overflow:auto}.issue-row{width:100%;text-align:left;background:#0c2543;border:1px solid #2e537d;border-radius:10px;color:#e9f4ff;padding:14px;cursor:pointer}.issue-row:hover,.issue-row.active{background:#154779;border-color:#56a6ff}.issue-top,.issue-bottom{display:flex;align-items:center;justify-content:space-between;gap:8px}.issue-top strong{font-size:14px;overflow-wrap:anywhere}.issue-bottom{font-size:12px;color:#b9d2ee;margin:9px 0}.issue-row small,.comment small{color:#93b7df}.pill{font-size:10px;border:1px solid #3f6b9c;border-radius:999px;padding:4px 8px;white-space:nowrap}.pill.high,.pill.critical{color:#ffb6a8;border-color:#e16b63}.pill.low{color:#a8dfc5}.editor{display:flex;flex-direction:column;gap:14px}.editor label{display:block;color:#bad4f0;font-size:12px;font-weight:650}.editor label input,.editor label select,.editor label textarea{display:block;margin-top:6px;font-size:14px;font-weight:400}.twocol{display:grid;grid-template-columns:1fr 1fr;gap:12px}.discussion{margin-top:28px;border-top:1px solid #365c83;padding-top:15px}.discussion h3{font-size:16px}.comment{background:#0b2442;border-radius:9px;padding:10px 13px;margin:8px 0}.comment p{white-space:pre-wrap;margin:0 0 8px}.discussion form{display:grid;gap:10px;margin-top:14px}.discussion button{justify-self:start}.empty{text-align:center;padding:80px 25px;color:#abc9e8}.empty span{font-size:38px}.muted{color:#a9c6e7}.alert,.notice{padding:12px;border-radius:8px;margin-bottom:15px;background:#51252b;color:#ffd1d1}.notice{background:#153e33;color:#a8f3c7}@media(max-width:1150px){.workgrid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}}@media(max-width:650px){.heading{align-items:flex-start;flex-direction:column}.stats{gap:8px}.metric{padding:13px}.filters{grid-template-columns:1fr 1fr}.filters input{grid-column:1/-1}.twocol{grid-template-columns:1fr}.panel{padding:12px}}
 </style>
 
-<style scoped>
+<style>
 .issues-page{max-width:none}
 .hero{position:relative;isolation:isolate;margin:-24px -24px 26px;padding:24px 28px 56px;min-height:230px;background:linear-gradient(90deg,rgba(6,21,42,.97) 0%,rgba(7,27,53,.82) 49%,rgba(7,27,53,.25) 100%),url('/images/sports-embossed-header.webp') center 42%/cover no-repeat;border-bottom:1px solid #315e8c}
 .hero:after{content:'';position:absolute;inset:auto 0 0;height:72px;background:linear-gradient(transparent,#081a31);z-index:-1}
@@ -194,10 +194,32 @@ onBeforeUnmount(()=>{window.removeEventListener('keydown',onEscape);document.bod
 @media(max-width:650px){.hero{margin:-12px -12px 18px;padding:22px 16px 42px}.hero-content{align-items:flex-start;flex-direction:column}.issue-modal-backdrop{padding:8px;align-items:flex-end}.issue-modal{max-height:96dvh;border-radius:16px 16px 0 0}.modal-heading,.modal-content{padding:16px}}
 </style>
 
-<style scoped>
+<style>
 .modal-heading-actions{display:flex;align-items:center;gap:10px}
 .export-button{border:1px solid #75a9dc;background:#205c98;color:#fff;border-radius:9px;padding:10px 14px;cursor:pointer;font:inherit;font-weight:650;white-space:nowrap}
 .export-button:hover:not(:disabled){background:#2b76bd}
 .export-button:disabled{opacity:.6;cursor:wait}
 @media(max-width:440px){.modal-heading-actions{gap:5px}.export-button{padding:8px;font-size:12px}.modal-close{padding:8px}}
+</style>
+
+<style>
+/* Teleported modal: these rules must not be scoped to the page root. */
+.issue-modal, .issue-modal * { box-sizing: border-box; }
+.issue-modal .modal-content { width:100%; min-width:0; flex:1 1 auto; overflow-y:auto; overflow-x:hidden; }
+.issue-modal .editor { display:flex; flex-direction:column; width:100%; gap:16px; margin:0; }
+.issue-modal .editor > label { display:block; width:100%; min-width:0; }
+.issue-modal .editor label { display:block; min-width:0; }
+.issue-modal .editor label > input,
+.issue-modal .editor label > select,
+.issue-modal .editor label > textarea { display:block; width:100%; min-width:0; margin-top:7px; }
+.issue-modal .editor textarea { resize:vertical; min-height:85px; }
+.issue-modal .editor .twocol { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; gap:14px; }
+.issue-modal .editor .twocol > label { min-width:0; width:100%; }
+.issue-modal .editor .modal-actions { position:sticky; bottom:-24px; z-index:2; display:flex; align-items:center; justify-content:flex-end; gap:10px; margin:4px -26px -24px; padding:16px 26px; border-top:1px solid #345c84; background:#102b4b; }
+.issue-modal .discussion { width:100%; }
+.issue-modal .discussion textarea { display:block; width:100%; }
+@media(max-width:650px) {
+ .issue-modal .editor .twocol { grid-template-columns:minmax(0,1fr); }
+ .issue-modal .editor .modal-actions { bottom:-16px; margin:4px -16px -16px; padding:14px 16px; }
+}
 </style>
