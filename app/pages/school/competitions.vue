@@ -62,7 +62,6 @@ const registrationWindowState = computed(() => {
   const end = c.registration_closes_at ? Date.parse(c.registration_closes_at) : NaN
   if (!Number.isFinite(start) || !Number.isFinite(end)) return { code: 'unconfigured', label: 'Dates not configured', detail: 'Set both registration dates in Settings.' }
   if (start >= end) return { code: 'invalid', label: 'Invalid registration dates', detail: 'Closing date must be after opening date.' }
-  if (c.status !== 'registration') return { code: 'disabled', label: 'Registration disabled', detail: `Competition status is ${c.status}.` }
   if (registrationClock.value < start) return { code: 'upcoming', label: 'Not yet open', detail: 'Registration opening date has not been reached.' }
   if (registrationClock.value >= end) return { code: 'closed', label: 'Registration closed', detail: 'The registration closing date has passed.' }
   return { code: 'open', label: 'Registration open', detail: 'Registration is within the configured window.' }
@@ -76,7 +75,6 @@ const registrationReadiness = computed(() => {
   if(c.age_cutoff_mode==='competition_date' && !c.starts_on)items.push('Set a competition date for the age cutoff')
   if(c.age_cutoff_mode==='custom' && !c.age_cutoff_date)items.push('Set the custom age cutoff date')
   if (!c.registration_opens_at || !c.registration_closes_at) items.push('Set both registration opening and closing dates')
-  if (c.status !== 'registration') items.push('Change competition status to Registration when ready')
   if (c.registration_closes_at && new Date(c.registration_closes_at).getTime() <= Date.now()) items.push('Registration closing date has passed')
   if (c.registration_opens_at && c.registration_closes_at && new Date(c.registration_opens_at).getTime() > new Date(c.registration_closes_at).getTime()) items.push('Correct registration dates')
   return { label: items.length ? 'Setup incomplete' : 'Configuration ready', items }
