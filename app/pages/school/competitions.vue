@@ -115,14 +115,14 @@ async function load() {
       db.from('sports').select('id,name').order('name'),
       db.from('event_definitions').select('id,sport_id,name,measurement').order('name'),
       db.from('competitions').select('id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id,registration_opens_at,registration_closes_at,age_cutoff_mode,age_cutoff_date,max_events_per_student').order('created_at',{ascending:false}).limit(1000),
-      db.from('competition_schools').select('competition_id,competitions(id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id)').eq('school_id',schoolId.value).limit(200)
+      db.from('competition_schools').select('competition_id,competitions(id,name,sport_id,school_year,starts_on,status,competition_type,organiser_school_id,registration_opens_at,registration_closes_at,age_cutoff_mode,age_cutoff_date,max_events_per_student)').eq('school_id',schoolId.value).limit(200)
     ])
     const failure=[sp,defs,owned,joined].find(x=>x.error)?.error
     if(failure) throw failure
     sports.value=sp.data||[]; definitions.value=defs.data||[]
     const map=new Map<string,any>()
     for(const c of owned.data||[]) if(isSuperAdmin.value || c.organiser_school_id===schoolId.value) map.set(c.id,c)
-    for(const r of joined.data||[]) {const c:any=r.competitions;if(c&&!Array.isArray(c)) map.set(c.id,{...c,joinedSchool:true})}
+    for(const r of joined.data||[]) {const c:any=r.competitions;if(c&&!Array.isArray(c)) map.set(c.id,{...map.get(c.id),...c,joinedSchool:true})}
     competitions.value=[...map.values()]
     if(!visibleCompetitions.value.some(c=>c.id===selected.value)) selected.value=visibleCompetitions.value[0]?.id||''
     await loadEvents()
