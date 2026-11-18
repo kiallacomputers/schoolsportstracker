@@ -1,6 +1,22 @@
 <script setup lang="ts">
 type EventRow={event_id:string;event_name:string;competition_name:string;age_group:string|null;division:string|null;starts_on:string|null;registered:boolean;registration_open:boolean}
-const email=ref(''),code=ref(''),session=ref(''),competitionId=ref(''),competitions=ref<{id:string;name:string;starts_on:string|null}[]>([]),step=ref<'email'|'code'|'events'>('email')
+type CompetitionRow={id:string;name:string;starts_on:string|null;registration_opens_at:string|null;registration_closes_at:string|null}
+function registrationState(c:CompetitionRow){
+ const start=c.registration_opens_at?Date.parse(c.registration_opens_at):NaN
+ const end=c.registration_closes_at?Date.parse(c.registration_closes_at):NaN
+ if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)return 'Dates Not Configured'
+ const now=Date.now()
+ return now<start?'Not Yet Open':now>=end?'Registration Closed':'Registration Open'
+}
+function registrationDetail(c:CompetitionRow){
+ const state=registrationState(c)
+ const value=state==='Not Yet Open'?c.registration_opens_at:state==='Registration Closed'?c.registration_closes_at:null
+ if(!value)return ''
+ return `${state==='Not Yet Open'?'Opens':'Closed'} ${new Intl.DateTimeFormat('en-AU',{dateStyle:'medium',timeStyle:'short',timeZone:'Australia/Melbourne'}).format(new Date(value))}`
+}
+const selectedCompetition=computed(()=>competitions.value.find(c=>c.id===competitionId.value))
+const registrationIsOpen=computed(()=>selectedCompetition.value?registrationState(selectedCompetition.value)==='Registration Open':false)
+const email=ref(''),code=ref(''),session=ref(''),competitionId=ref(''),competitions=ref<CompetitionRow[]>([]),step=ref<'email'|'code'|'events'>('email')
 const busy=ref(false),error=ref(''),notice=ref(''),events=ref<EventRow[]>([]),saving=ref('')
 const discovering=ref(false),lookupDone=ref(false),lookupEmail=ref('')
 const STORAGE_KEY='sst-student-registration-session-v1'
@@ -55,6 +71,7 @@ async function findCompetitions(){
  finally{discovering.value=false}
 }
 async function requestCode(){
+ if(!registrationIsOpen.value){error.value='Registration is not currently open for this competition.';return}
  if(!competitionId.value||lookupEmail.value!==email.value.trim().toLowerCase()||!competitions.value.some(c=>c.id===competitionId.value)){
   error.value='Find and select a competition for your school first.';return
  }
@@ -106,10 +123,13 @@ function restart(){clearSession();code.value='';step.value='email';error.value='
     <label class="field"><span>School email address</span><input v-model.trim="email" type="email" autocomplete="email" maxlength="254" required placeholder="student@school.edu.au"></label>
     <button class="secondary" type="button" :disabled="discovering||!email" @click="findCompetitions">{{discovering?'Finding competitions…':'Find my school competitions'}}</button>
     <template v-if="lookupDone">
-     <label v-if="competitions.length" class="field" style="margin-top:1rem"><span>Competitions available to your school</span><select v-model="competitionId" required><option value="" disabled>Select a competition</option><option v-for="c in competitions" :key="c.id" :value="c.id">{{c.name}} — {{c.starts_on||'Date TBA'}}</option></select></label>
-     <p v-else role="status">No competitions are currently open for this school's email domain. Check your school email address or contact your school.</p>
+     <label v-if="competitions.length" class="field" style="margin-top:1rem"><span>Competitions available to your school</span><select v-model="competitionId" required><option value="" disabled>Select a competition</option><option v-for="c in competitions" :key="c.id" :value="c.id">{{c.name}} — {{registrationState(c)}}</option></select></label>
+     <p v-else role="status">No eligible competitions were found for this school's email domain. Check your school email address or contact your school.</p>
     </template>
-    <div v-if="competitionId" style="margin-top:1rem"><button class="btn" :disabled="busy||discovering">{{busy?'Sending…':'Send verification code'}}</button></div>
+    <div v-if="selectedCompetition" style="margin-top:1rem">
+     <p><strong>{{registrationState(selectedCompetition)}}</strong><span v-if="registrationDetail(selectedCompetition)"> — {{registrationDetail(selectedCompetition)}}</span></p>
+    </div>
+    <div v-if="competitionId" style="margin-top:1rem"><button class="btn" :disabled="busy||discovering||!registrationIsOpen">{{busy?'Sending…':'Send verification code'}}</button></div>
    </form>
    <form v-else-if="step==='code'" @submit.prevent="verify">
     <p>Enter the six-digit code sent to <strong>{{email}}</strong>. It expires after 10 minutes.</p>
