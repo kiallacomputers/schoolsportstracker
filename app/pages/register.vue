@@ -145,7 +145,7 @@ function restart(){clearSession();code.value='';step.value='email';error.value='
      <h3>{{competition}}</h3>
      <div v-for="e in items" :key="e.event_id" class="data-row">
       <div><strong>{{e.event_name}}</strong><p>{{e.age_group||'All ages'}} · {{e.division||'Open'}} · {{e.starts_on||'Date TBA'}}</p></div>
-      <button class="btn" :disabled="saving===e.event_id||!e.registration_open" @click="toggle(e)">
+      <button v-if="e.registration_open" class="btn" :disabled="saving===e.event_id" @click="toggle(e)">
        {{saving===e.event_id?'Saving…':e.registered?'Withdraw':'Register'}}
       </button>
       <small v-if="!e.registration_open">Registration closed</small>
