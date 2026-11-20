@@ -1,6 +1,6 @@
 <script setup lang="ts">
 withDefaults(defineProps<{maxHeight?:string}>(),{maxHeight:'none'})
-const viewport=ref<HTMLElement|null>(null),track=ref<HTMLElement|null>(top=ref(0),total=ref(1),visible=ref(1)
+const viewport=ref<HTMLElement|null>(null),track=ref<HTMLElement|null>(null),top=ref(0),total=ref(1),visible=ref(1)
 const scrollable=computed(()=>total.value>visible.value+1)
 const thumbHeight=computed(()=>Math.min(visible.value,Math.max(28,visible.value*visible.value/total.value)))
 const thumbTop=computed(()=>scrollable.value?top.value/(total.value-visible.value)*Math.max(0,visible.value-thumbHeight.value):0)
