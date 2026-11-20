@@ -26,6 +26,7 @@ export function useStudents(){
  const enrolmentResult=existing?await db.from('student_enrolments').update({year_level:yearLevel,house_id:houseId||null}).eq('id',existing.id).eq('school_id',schoolId.value):await db.from('student_enrolments').insert({school_id:schoolId.value,student_id:studentId,school_year:year.value,year_level:yearLevel,house_id:houseId||null})
  if(enrolmentResult.error)throw enrolmentResult.error
  await load()
+ return studentId
  }finally{saving.value=false}}
  return {students,enrolments,houses,year,loading,saving,error,enrolmentMap,houseMap,load,save}
 }

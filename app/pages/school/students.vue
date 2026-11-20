@@ -17,7 +17,7 @@ const filtered=computed(()=>data.students.value.filter(s=>{
 const active=computed(()=>data.students.value.filter(s=>s.is_active).length)
 function open(student:Student|null){selected.value=student;formError.value='';editorOpen.value=true}
 async function save(student:Partial<Student>&{student_number:string;given_name:string;family_name:string},level:string,house:string){
- formError.value='';try{await data.save(student,level,house);editorOpen.value=false;notice.value='Student saved successfully'}catch(e:any){formError.value=e.message||'Unable to save student'}
+ formError.value='';try{const studentId=await data.save(student,level,house);const saved=data.students.value.find(s=>s.id===studentId);if(!saved)throw new Error('Student saved but could not be loaded');selected.value=saved;notice.value='Student saved successfully'}catch(e:any){formError.value=e.message||'Unable to save student'}
 }
 watch([schoolId,data.year],()=>{void data.load()},{immediate:true})
 </script>

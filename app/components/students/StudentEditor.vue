@@ -5,6 +5,7 @@ const emit=defineEmits<{close:[];save:[Partial<Student>&{student_number:string;g
 const form=reactive({id:props.student?.id,student_number:props.student?.student_number||'',given_name:props.student?.given_name||'',family_name:props.student?.family_name||'',email:props.student?.email||'',date_of_birth:props.student?.date_of_birth||'',gender:props.student?.gender||'',sporting_division:props.student?.sporting_division||'',is_active:props.student?.is_active!==false})
 const level=ref(props.yearLevel),house=ref(props.houseId)
 const editing=ref(!props.student)
+watch(()=>props.student,(student)=>{if(student)editing.value=false})
 const details=computed(()=>[
  {label:'Student number',value:props.student?.student_number},
  {label:'Given name',value:props.student?.given_name},
