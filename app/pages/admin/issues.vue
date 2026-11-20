@@ -2,7 +2,10 @@
 definePageMeta({ layout: 'workspace' })
 type Issue={id:string;reference_number:number;title:string;description:string;category:string;priority:string;status:string;area:string;assigned_to:string;resolution:string;created_at:string}
 const db=useSupabaseClient()
-type IssueComment={id:string;issue_id:string;comment:string;created_at:string}\nconst issues=ref<Issue[]>([])\nconst comments=ref<IssueComment[]>([])\nconst newComment=ref('')
+type IssueComment={id:string;issue_id:string;comment:string;created_at:string}
+const issues=ref<Issue[]>([])
+const comments=ref<IssueComment[]>([])
+const newComment=ref('')
 const loading=ref(true),busy=ref(false),error=ref(''),notice=ref('')
 const search=ref(''),filter=ref('open'),selected=ref<Issue|null>(null),creating=ref(false)
 const categories=['fault','improvement','idea','task'], priorities=['low','medium','high','critical'],statuses=['new','in_progress','on_hold','resolved','closed']
@@ -17,7 +20,10 @@ function add(){selected.value=null;creating.value=true;Object.assign(form,blank(
 function close(){creating.value=false;selected.value=null}
 async function load(){loading.value=true;error.value='';try{const {data:admin,error:authError}=await db.rpc('is_platform_admin');if(authError)throw authError;isAdmin.value=admin===true;if(!isAdmin.value)throw new Error('Platform administrator access required');const {data,error:e}=await db.from('management_issues').select('*').order('reference_number',{ascending:true});if(e)throw e;issues.value=data||[];const {data:notes,error:notesError}=await db.from('management_issue_comments').select('id,issue_id,comment,created_at').order('created_at',{ascending:true});if(notesError)throw notesError;comments.value=(notes||[]) as IssueComment[]}catch(e:any){error.value=e.message||'Unable to load development items'}finally{loading.value=false}}
 async function save(){if(busy.value)return;busy.value=true;error.value='';notice.value='';try{const {data:{user}}=await db.auth.getUser();if(!user)throw new Error('Please sign in');const values={title:form.title.trim(),description:form.description.trim(),category:form.category,priority:form.priority,status:form.status,area:form.area.trim()||'Development',assigned_to:form.assigned_to.trim(),resolution:form.resolution.trim(),updated_by:user.id};if(values.title.length<3)throw new Error('Title must be at least three characters');const result=selected.value?await db.from('management_issues').update(values).eq('id',selected.value.id):await db.from('management_issues').insert({...values,created_by:user.id});if(result.error)throw result.error;close();notice.value='Development item saved';await load()}catch(e:any){error.value=e.message||'Unable to save'}finally{busy.value=false}}
-async function addComment(){if(!selected.value||!newComment.value.trim()||busy.value)return;busy.value=true;error.value='';try{const {data:{user}}=await db.auth.getUser();if(!user)throw new Error('Please sign in');const {error:e}=await db.from('management_issue_comments').insert({issue_id:selected.value.id,comment:newComment.value.trim(),created_by:user.id});if(e)throw e;newComment.value='';await load();notice.value='Comment added'}catch(e:any){error.value=e.message||'Unable to add comment'}finally{busy.value=false}}\nconst commentsFor=(id:string)=>comments.value.filter(c=>c.issue_id===id)\nconst date=(v:string)=>new Date(v).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'})\nonMounted(load)
+async function addComment(){if(!selected.value||!newComment.value.trim()||busy.value)return;busy.value=true;error.value='';try{const {data:{user}}=await db.auth.getUser();if(!user)throw new Error('Please sign in');const {error:e}=await db.from('management_issue_comments').insert({issue_id:selected.value.id,comment:newComment.value.trim(),created_by:user.id});if(e)throw e;newComment.value='';await load();notice.value='Comment added'}catch(e:any){error.value=e.message||'Unable to add comment'}finally{busy.value=false}}
+const commentsFor=(id:string)=>comments.value.filter(c=>c.issue_id===id)
+const date=(v:string)=>new Date(v).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'})
+onMounted(load)
 </script>
 <template>
   <div class="space-y-6">
