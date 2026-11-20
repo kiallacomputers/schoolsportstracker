@@ -162,7 +162,7 @@ html, body, #__nuxt { min-height: 100%; background-color: var(--sst-page-navy); 
 .v3-workspace .page .admin-section{padding:0 0 40px;background:transparent;color:var(--v3-text)}
 .v3-workspace .page .admin-section::before,.v3-workspace .page .sports-page-heading::before{display:none!important}
 .v3-workspace .page .sports-page-heading{min-height:0;padding:0 0 18px}
-.v3-workspace .page :is(.card,.stat-card,.metric-card,.competition-hero,.panel):not(.v3-keep-dark){background:var(--v3-surface)!important;background-image:none!important;border-color:var(--v3-border)!important;color:var(--v3-text);box-shadow:var(--v3-shadow)}
+.v3-workspace .page :is(.card,.stat-card,.metric-card,.competition-hero,.panel):not(.v3-keep-dark){background:var(--v3-surface-alt)!important;background-image:none!important;border-color:var(--v3-border)!important;color:var(--v3-text);box-shadow:var(--v3-shadow)}
 .v3-workspace .page :is(.card,.stat-card,.metric-card,.competition-hero,.panel) :is(h1,h2,h3,strong){color:var(--v3-text)}
 .v3-workspace .page :is(.card,.stat-card,.metric-card,.competition-hero,.panel) :is(p,small){color:var(--v3-muted)}
 .v3-workspace .page .admin-section :is(input,select,textarea),.v3-workspace .page .field input{background:var(--v3-surface);color:var(--v3-text);border:1px solid var(--v3-border);border-radius:8px}
