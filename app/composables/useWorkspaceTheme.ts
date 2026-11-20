@@ -1,23 +1,16 @@
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
-export type WorkspaceTheme = 'light' | 'dark' | 'system'
+export type WorkspaceTheme = 'light' | 'dark'
 const STORAGE_KEY = 'sst-v3-theme'
-const preference = ref<WorkspaceTheme>('system')
-const systemDark = ref(false)
-let listenerAttached = false
+const preference = ref<WorkspaceTheme>('light')
 
 export function useWorkspaceTheme() {
-  const resolvedTheme = computed(() => preference.value === 'system' ? (systemDark.value ? 'dark' : 'light') : preference.value)
+  const resolvedTheme = computed(() => preference.value)
   onMounted(() => {
     if (typeof window === 'undefined') return
     const saved = window.localStorage.getItem(STORAGE_KEY)
-    if (saved === 'light' || saved === 'dark' || saved === 'system') preference.value = saved
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    systemDark.value = media.matches
-    if (!listenerAttached) {
-      media.addEventListener('change', event => { systemDark.value = event.matches })
-      listenerAttached = true
-    }
+    // Old 'system' selections migrate to the new light default.
+    preference.value = saved === 'dark' ? 'dark' : 'light'
   })
   function setTheme(next: WorkspaceTheme) {
     preference.value = next
