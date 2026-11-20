@@ -18,7 +18,7 @@ watch(() => route.path, async (path) => {
   <Transition name="sst-auth-fade">
     <div v-if="transitioning" class="sst-auth-screen" role="status" aria-live="polite" aria-label="Preparing your dashboard">
       <div class="sst-auth-panel">
-        <img src="/images/school-sports-tracker-logo.png" alt="School Sports Tracker" class="sst-auth-logo" />
+        <img src="/logo.png" alt="School Sports Tracker" class="sst-auth-logo" />
         <div class="sst-auth-name">SCHOOL SPORTS TRACKER</div>
         <div class="sst-auth-spinner" aria-hidden="true"></div>
         <h2>Preparing your dashboard…</h2>
