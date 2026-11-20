@@ -86,34 +86,52 @@ async function signOut() { await db.auth.signOut(); await navigateTo('/login') }
 </script>
 
 <template>
-<main class="sst-dashboard">
-  <div class="dashboard-heading"><div><p v-if="!isPlatformAdmin" class="eyebrow">SCHOOL WORKSPACE</p><h1>{{ isPlatformAdmin ? 'Sports Dashboard' : 'School Dashboard' }}</h1><p v-if="!isPlatformAdmin" class="subheading">{{ schoolName }} · Your competitions, students and event management in one place</p></div><NuxtLink v-if="!isPlatformAdmin && selectedId" class="action-button" :to="schoolLink('competitions')">Manage Competitions →</NuxtLink></div>
-  <p v-if="loading">Loading dashboard…</p><p v-if="errorMessage" class="error" role="alert">{{errorMessage}}</p>
+<main class="v3-dashboard">
+  <V3PageHeader :title="isPlatformAdmin ? 'Overview' : 'School overview'" :description="isPlatformAdmin ? 'Monitor schools, competitions and activity across the platform.' : schoolName + ' · Competitions, participants and meet operations.'" eyebrow="WORKSPACE">
+    <template #actions><NuxtLink v-if="!isPlatformAdmin && selectedId" class="primary-action" :to="schoolLink('competitions')">Manage competitions <span aria-hidden="true">→</span></NuxtLink></template>
+  </V3PageHeader>
+  <p v-if="loading" class="feedback" role="status">Loading dashboard…</p>
+  <p v-if="errorMessage" class="feedback error" role="alert">{{ errorMessage }}</p>
   <template v-if="!loading && !errorMessage">
-    <label v-if="!isPlatformAdmin && schoolOptions.length>1" class="school-picker">School <select v-model="selectedId"><option v-for="s in schoolOptions" :key="s.id" :value="s.id">{{s.name}}</option></select></label>
+    <label v-if="!isPlatformAdmin && schoolOptions.length > 1" class="school-picker">Viewing school <select v-model="selectedId"><option v-for="s in schoolOptions" :key="s.id" :value="s.id">{{s.name}}</option></select></label>
     <div class="metrics">
-      <div class="metric"><span class="metric-icon">🎓</span><span>Students</span><strong>{{isPlatformAdmin?'—':counts.students}}</strong><small>School enrolments</small></div>
-      <div class="metric"><span class="metric-icon">🏆</span><span>Competitions</span><strong>{{isPlatformAdmin?recent.length:counts.competitions}}</strong><small>Available competitions</small></div>
-      <div class="metric"><span class="metric-icon">🏠</span><span>{{isPlatformAdmin?'Schools':'Houses'}}</span><strong>{{isPlatformAdmin?schools.length:counts.houses}}</strong><small>{{isPlatformAdmin?'Registered schools':'School houses'}}</small></div>
-      <div class="metric"><span class="metric-icon">👥</span><span>School Staff</span><strong>{{isPlatformAdmin?'—':counts.staff}}</strong><small>Assigned members</small></div>
+      <div class="metric"><span class="metric-top"><span>Students</span><span class="metric-icon">🎓</span></span><strong>{{isPlatformAdmin?'—':counts.students}}</strong><small>Enrolled students</small></div>
+      <div class="metric"><span class="metric-top"><span>Competitions</span><span class="metric-icon">🏆</span></span><strong>{{isPlatformAdmin?recent.length:counts.competitions}}</strong><small>Available meets</small></div>
+      <div class="metric"><span class="metric-top"><span>{{isPlatformAdmin?'Schools':'Houses'}}</span><span class="metric-icon">🏫</span></span><strong>{{isPlatformAdmin?schools.length:counts.houses}}</strong><small>{{isPlatformAdmin?'Registered schools':'School houses'}}</small></div>
+      <div class="metric"><span class="metric-top"><span>Staff</span><span class="metric-icon">👥</span></span><strong>{{isPlatformAdmin?'—':counts.staff}}</strong><small>Assigned members</small></div>
     </div>
     <div class="dashboard-grid">
-      <section class="panel"><div class="panel-head"><div><p class="eyebrow">YOUR WORKSPACE</p><h2>Competitions</h2></div><NuxtLink v-if="!isPlatformAdmin" :to="schoolLink('competitions')">View all →</NuxtLink></div>
-        <div v-for="c in recent" :key="c.id" class="competition-row"><span class="competition-symbol">🏊</span><div class="competition-details"><strong>{{c.name}}</strong><small>School year {{c.school_year || '—'}}</small></div><span class="status-pill">{{c.status}}</span><NuxtLink v-if="!isPlatformAdmin" class="row-action" :to="{path:'/school/competitions',query:{school:selectedId,competition:c.id}}">Open →</NuxtLink></div>
-        <p v-if="!recent.length" class="empty">No competitions to display yet.</p>
-      </section>
-      <section class="panel"><div class="panel-head"><div><p class="eyebrow">QUICK ACCESS</p><h2>Manage your school</h2></div></div>
-        <template v-if="!isPlatformAdmin"><NuxtLink class="quick-link" :to="schoolLink('competitions')">🏆 <span>Competition Workspace</span> →</NuxtLink><NuxtLink class="quick-link" :to="schoolLink('entries')">📝 <span>Event Registrations</span> →</NuxtLink><NuxtLink class="quick-link" :to="schoolLink('race-day')">🏁 <span>Event Day</span> →</NuxtLink><NuxtLink class="quick-link" :to="schoolLink('mobile-results')">📱 <span>Mobile Results Entry</span> →</NuxtLink></template>
-        <template v-else><NuxtLink v-for="link in platformLinks.slice(0,5)" :key="link.to" class="quick-link" :to="link.to">{{link.icon}} <span>{{link.label}}</span> →</NuxtLink></template>
-      </section>
+      <V3Panel title="Recent competitions" description="Your latest meets and competition activity">
+        <template #actions><NuxtLink v-if="!isPlatformAdmin" class="text-action" :to="schoolLink('competitions')">View all →</NuxtLink></template>
+        <div class="competition-table">
+          <div class="table-header"><span>Competition</span><span>Year</span><span>Status</span><span></span></div>
+          <div v-for="c in recent" :key="c.id" class="competition-row">
+            <span class="competition-name"><span class="competition-symbol">🏅</span><strong>{{c.name}}</strong></span>
+            <span class="table-muted">{{c.school_year || '—'}}</span>
+            <span><span class="status-pill">{{c.status || 'Unknown'}}</span></span>
+            <NuxtLink v-if="!isPlatformAdmin" class="text-action" :to="{path:'/school/competitions',query:{school:selectedId,competition:c.id}}">Open →</NuxtLink><span v-else></span>
+          </div>
+          <p v-if="!recent.length" class="empty">No competitions to display yet.</p>
+        </div>
+      </V3Panel>
+      <V3Panel title="Quick actions" description="Jump straight into your everyday tasks">
+        <div class="quick-actions">
+          <template v-if="!isPlatformAdmin">
+            <NuxtLink class="quick-link" :to="schoolLink('competitions')"><span>🏆</span> Competition workspace <span class="arrow">→</span></NuxtLink>
+            <NuxtLink class="quick-link" :to="schoolLink('entries')"><span>📝</span> Event registrations <span class="arrow">→</span></NuxtLink>
+            <NuxtLink class="quick-link" :to="schoolLink('race-day')"><span>🏁</span> Event day <span class="arrow">→</span></NuxtLink>
+            <NuxtLink class="quick-link" :to="schoolLink('mobile-results')"><span>📱</span> Mobile result entry <span class="arrow">→</span></NuxtLink>
+          </template>
+          <template v-else><NuxtLink v-for="link in platformLinks.slice(0,6)" :key="link.to" class="quick-link" :to="link.to"><span>{{link.icon}}</span>{{link.label}}<span class="arrow">→</span></NuxtLink></template>
+        </div>
+      </V3Panel>
     </div>
   </template>
 </main>
 </template>
 <style scoped>
-.sst-dashboard{max-width:1480px;margin:auto;color:#edf5ff;padding:4px 0 30px;font-family:Inter,ui-sans-serif,system-ui,sans-serif}/* Sports artwork belongs to the dashboard title banner, not the navigation bar. */
-.dashboard-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 27px;min-height:190px;padding:30px 34px;border:1px solid #2b4d75;border-radius:16px;background-image:linear-gradient(90deg,rgba(6,17,37,.97) 0%,rgba(6,17,37,.84) 38%,rgba(6,17,37,.24) 100%),url('/images/sports-embossed-header.webp');background-position:center,center 15%;background-size:cover,cover;background-repeat:no-repeat;overflow:hidden}
-.dashboard-heading>div{position:relative;z-index:1}
-.dashboard-heading .action-button{position:relative;z-index:1;flex-shrink:0}.eyebrow{font-size:10px;letter-spacing:1.7px;color:#80b7ff;font-weight:750;margin:0 0 10px}.dashboard-heading h1{font-size:clamp(27px,3vw,39px);letter-spacing:-.04em;margin:0 0 8px}.subheading{color:#9eb9d9;margin:0;font-size:14px}.action-button{background:#2774d0;color:white;text-decoration:none;padding:13px 18px;border-radius:10px;font-size:13px;font-weight:750}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:25px 0}.metric{background:linear-gradient(150deg,#142f53,#102642);border:1px solid #2b4d75;border-radius:16px;padding:21px;display:flex;flex-direction:column;gap:7px}.metric-icon{font-size:21px;margin-bottom:7px}.metric>span:not(.metric-icon){font-size:13px;color:#b7cce6}.metric strong{font-size:35px;line-height:1.15}.metric small{font-size:11px;color:#87a6c8}.dashboard-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr);gap:18px}.panel{background:#102641;border:1px solid #2b4b70;border-radius:17px;padding:24px}.panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}.panel-head h2{font-size:20px;margin:0}.panel-head a{color:#9ec8ff;text-decoration:none;font-size:13px}.competition-row{display:flex;align-items:center;gap:13px;padding:17px 0;border-top:1px solid #2a4767;flex-wrap:wrap}.competition-symbol{display:grid;place-items:center;width:42px;height:42px;background:#1b3c65;border-radius:12px;font-size:20px}.competition-details{display:flex;flex-direction:column;gap:6px;flex:1;min-width:160px}.competition-details strong{font-size:14px}.competition-details small{color:#94b1d2;font-size:12px}.status-pill{background:#1d4966;color:#b9e5f3;border-radius:99px;padding:6px 10px;text-transform:capitalize;font-size:11px}.row-action{color:#c7e1ff;text-decoration:none;font-size:13px}.quick-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#e6f1ff;border:1px solid #29496e;background:#173453;border-radius:11px;padding:16px;margin:10px 0;font-size:14px}.quick-link span{flex:1}.quick-link:hover{background:#215081}.empty{color:#a9c1dc}.school-picker{display:flex;align-items:center;gap:12px;margin-bottom:14px;color:#b8cce5}.school-picker select{background:#163658;color:white;border:1px solid #46688d;padding:9px;border-radius:9px}.error{color:#ffb5b5}
-@media(max-width:1000px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-grid{grid-template-columns:1fr}}@media(max-width:600px){.dashboard-heading{align-items:flex-start;flex-direction:column;min-height:165px;padding:24px 20px;background-position:center,center 15%}.metrics{gap:9px}.metric{padding:15px}.metric strong{font-size:28px}.panel{padding:16px}}
+.v3-dashboard{display:grid;gap:22px;max-width:1500px;margin:0 auto;color:var(--v3-text);font-family:Inter,ui-sans-serif,system-ui,sans-serif}
+.primary-action{display:inline-flex;align-items:center;gap:12px;background:#246bb8;color:#fff;text-decoration:none;padding:12px 17px;border-radius:10px;font-size:13px;font-weight:750;white-space:nowrap}.primary-action:hover{background:#175496}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}.metric{background:var(--v3-surface);border:1px solid var(--v3-border);border-radius:15px;padding:22px;display:flex;flex-direction:column;gap:11px;box-shadow:var(--v3-shadow)}.metric-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:var(--v3-muted);font-weight:650}.metric-icon{display:grid;place-items:center;width:36px;height:36px;background:var(--v3-surface-alt);border-radius:10px;font-size:19px}.metric strong{font-size:34px;letter-spacing:-.04em;line-height:1.1}.metric small{font-size:12px;color:var(--v3-muted)}.dashboard-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr);gap:18px}.competition-table{overflow-x:auto}.table-header,.competition-row{display:grid;grid-template-columns:minmax(190px,1fr) 75px 105px 60px;gap:12px;align-items:center;min-width:460px;padding:13px 0}.table-header{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--v3-muted);font-weight:800;border-bottom:1px solid var(--v3-border)}.competition-row{border-bottom:1px solid var(--v3-border);font-size:13px}.competition-row:last-child{border-bottom:0}.competition-name{display:flex;align-items:center;gap:11px;min-width:0}.competition-name strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.competition-symbol{display:grid;place-items:center;width:34px;height:34px;background:var(--v3-surface-alt);border-radius:9px;flex-shrink:0}.table-muted,.empty{color:var(--v3-muted)}.status-pill{display:inline-flex;background:var(--v3-surface-alt);border:1px solid var(--v3-border);color:var(--v3-text);border-radius:99px;padding:5px 9px;text-transform:capitalize;font-size:11px}.text-action{color:var(--v3-accent);text-decoration:none;font-size:12px;font-weight:750}.quick-actions{display:grid;gap:9px}.quick-link{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--v3-border);border-radius:10px;color:var(--v3-text);text-decoration:none;font-size:13px;font-weight:600}.quick-link:hover{background:var(--v3-surface-alt)}.arrow{margin-left:auto;color:var(--v3-accent)}.school-picker{display:flex;align-items:center;gap:10px;color:var(--v3-muted);font-size:13px}.school-picker select{border:1px solid var(--v3-border);background:var(--v3-surface);color:var(--v3-text);padding:9px;border-radius:9px}.feedback{padding:14px;color:var(--v3-muted)}.error{color:#c94b4b}
+@media(max-width:1050px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-grid{grid-template-columns:1fr}}@media(max-width:540px){.metrics{gap:10px}.metric{padding:15px}.metric strong{font-size:28px}}
 </style>
