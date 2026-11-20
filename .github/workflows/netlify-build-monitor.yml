@@ -1,0 +1,118 @@
+name: Netlify build monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  check-netlify:
+    name: Check School Sports Tracker deployments
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      NETLIFY_SITE_ID: 8d22c9f1-7677-43a6-aa64-19ddb82a7a0b
+      NETLIFY_ACCESS_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
+    steps:
+      - name: Query Netlify deployments and capture failures
+        shell: python
+        run: |
+          import json
+          import os
+          import pathlib
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          token = os.environ.get("NETLIFY_ACCESS_TOKEN", "")
+          if not token:
+              print("::error::NETLIFY_ACCESS_TOKEN secret is missing.")
+              sys.exit(1)
+
+          site = os.environ["NETLIFY_SITE_ID"]
+          base = "https://api.netlify.com/api/v1"
+          headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
+
+          def fetch(path):
+              request = urllib.request.Request(base + path, headers=headers)
+              with urllib.request.urlopen(request, timeout=25) as response:
+                  return response.read().decode("utf-8", errors="replace")
+
+          try:
+              deployments = json.loads(fetch("/sites/" + site + "/deploys?per_page=20"))
+          except urllib.error.HTTPError as exc:
+              print(f"::error::Netlify API returned HTTP {exc.code}. Verify the token and site access.")
+              sys.exit(1)
+          except Exception as exc:
+              print(f"::error::Unable to query Netlify: {type(exc).__name__}: {exc}")
+              sys.exit(1)
+
+          if not isinstance(deployments, list):
+              print("::error::Unexpected Netlify API response.")
+              sys.exit(1)
+
+          report = pathlib.Path("netlify-monitor")
+          report.mkdir(exist_ok=True)
+          failures = []
+          rows = ["# School Sports Tracker — Netlify deployments", "",
+                  "Latest 20 deployments checked for site `" + site + "`.", "",
+                  "| Deploy | Context | State | Updated |", "|---|---|---|---|"]
+
+          for deploy in deployments:
+              state = str(deploy.get("state") or "unknown")
+              deploy_id = str(deploy.get("id") or "")
+              context = str(deploy.get("context") or "unknown")
+              updated = str(deploy.get("updated_at") or deploy.get("created_at") or "")
+              link = "https://app.netlify.com/sites/" + site + "/deploys/" + urllib.parse.quote(deploy_id)
+              rows.append(f"| [`{deploy_id[:12]}`]({link}) | {context} | {state} | {updated} |")
+              if state.lower() in ("error", "failed"):
+                  failures.append({"id": deploy_id, "context": context, "state": state,
+                                   "created_at": deploy.get("created_at"),
+                                   "updated_at": updated, "deploy_url": link,
+                                   "error_message": deploy.get("error_message")})
+
+          if failures:
+              rows.extend(["", "## Failed deployments", ""])
+              for failure in failures:
+                  rows.append("- " + failure["deploy_url"] + " (" + failure["state"] + ")")
+                  if failure["error_message"]:
+                      rows.append("  - Netlify error: " + str(failure["error_message"]).replace("\n", " ")[:500])
+
+                  # Best-effort retrieval: some Netlify plans/API versions may not expose deploy logs.
+                  deploy_id = failure["id"]
+                  try:
+                      raw = fetch("/deploys/" + urllib.parse.quote(deploy_id) + "/log")
+                      (report / ("deploy-" + deploy_id + ".log")).write_text(raw[:200000], encoding="utf-8")
+                  except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
+                      (report / ("deploy-" + deploy_id + ".txt")).write_text(
+                          "Build log unavailable through the Netlify API. Open " + failure["deploy_url"] + "\n",
+                          encoding="utf-8")
+
+          (report / "deployments.json").write_text(
+              json.dumps({"site_id": site, "deployments": [
+                  {"id": d.get("id"), "state": d.get("state"), "context": d.get("context"),
+                   "created_at": d.get("created_at"), "updated_at": d.get("updated_at")}
+                  for d in deployments], "failures": failures}, indent=2), encoding="utf-8")
+
+          summary = "\n".join(rows) + "\n"
+          (report / "summary.md").write_text(summary, encoding="utf-8")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
+              out.write(summary)
+
+          print(f"Checked {len(deployments)} deployments; found {len(failures)} failures.")
+          if failures:
+              print("::error::Netlify deployment failures found. See the job summary and uploaded report.")
+              sys.exit(1)
+
+      - name: Upload deployment report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: netlify-deployment-report
+          path: netlify-monitor/
+          retention-days: 7
+          if-no-files-found: warn
