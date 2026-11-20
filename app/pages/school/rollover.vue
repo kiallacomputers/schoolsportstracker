@@ -72,7 +72,6 @@ async function execute() {
   <div class="w-full min-w-0 space-y-6 text-slate-100">
     <header class="rollover-banner">
       <h1 class="text-3xl font-bold">Student Year Rollover</h1>
-      <p class="text-slate-300">{{ schoolName }} · Promote students into the next school year while preserving historical records.</p>
     </header>
     <p v-if="error" role="alert" class="rounded-xl border border-red-500/60 bg-red-950/70 p-4 text-red-100">{{ error }}</p>
     <p v-if="success" role="status" class="rounded-xl border border-emerald-500/60 bg-emerald-950/70 p-4 text-emerald-100">{{ success }}</p>
