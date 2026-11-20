@@ -139,7 +139,7 @@ async function signOut(){ await db.auth.signOut(); await navigateTo('/login') }
   </div>
 </template>
 <style scoped>
-.v3-workspace{--v3-bg:#f3f6fb;--v3-surface:#fff;--v3-surface-alt:#eaf0f8;--v3-text:#162b46;--v3-muted:#63758d;--v3-border:#dbe4ef;--v3-accent:#2369bd;--v3-sidebar:#102742;--v3-sidebar-text:#c7d8ed;--v3-shadow:0 8px 30px rgba(18,45,77,.05);display:flex;min-height:100vh;background:var(--v3-bg);color:var(--v3-text);font-family:Inter,ui-sans-serif,system-ui,sans-serif}
+.v3-workspace{--v3-bg:#ffffff;--v3-surface:#ffffff;--v3-surface-alt:#f3f5f8;--v3-text:#162b46;--v3-muted:#63758d;--v3-border:#dbe4ef;--v3-accent:#2369bd;--v3-sidebar:#102742;--v3-sidebar-text:#c7d8ed;--v3-shadow:0 8px 30px rgba(18,45,77,.05);display:flex;min-height:100vh;background:var(--v3-bg);color:var(--v3-text);font-family:Inter,ui-sans-serif,system-ui,sans-serif}
 .v3-workspace[data-theme=dark]{--v3-bg:#0b1628;--v3-surface:#14243b;--v3-surface-alt:#1b304c;--v3-text:#eff5fd;--v3-muted:#a6bbd4;--v3-border:#2c4462;--v3-accent:#83baff;--v3-sidebar:#09182c;--v3-sidebar-text:#c7d8ed;--v3-shadow:0 10px 32px rgba(0,0,0,.12)}
 .content{flex:1;min-width:0}.page{box-sizing:border-box;width:100%;max-width:1600px;margin-inline:auto;padding:28px 30px;overflow-x:auto;background:transparent;min-height:calc(100vh - 74px)}.shade{display:none}
 .v3-workspace :deep(.admin-section::before),.v3-workspace :deep(.sports-page-heading::before){content:none!important;display:none!important}
