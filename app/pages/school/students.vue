@@ -36,5 +36,5 @@ watch([schoolId,data.year],()=>{void data.load()},{immediate:true})
 <StudentsStudentFilters v-model:search="search" v-model:status="status" v-model:year-level="yearLevel" v-model:house-id="houseId" :years="years" :houses="data.houses.value" />
 <p v-if="data.loading.value" class="py-8">Loading students…</p><StudentsStudentTable v-else :students="filtered" :enrolments="data.enrolmentMap.value" :houses="data.houseMap.value" @select="open"/></UiPanel>
 <p v-if="formError" role="alert" class="rounded-xl bg-red-50 p-4 text-red-700">{{formError}}</p>
-<StudentsStudentEditor v-if="editorOpen && canManage" :student="selected" :houses="data.houses.value" :year-level="selected?data.enrolmentMap.value.get(selected.id)?.year_level||'':''" :house-id="selected?data.enrolmentMap.value.get(selected.id)?.house_id||'':''" :busy="data.saving.value" @close="editorOpen=false" @save="save"/>
+<StudentsStudentEditor v-if="editorOpen" :student="selected" :houses="data.houses.value" :year-level="selected?data.enrolmentMap.value.get(selected.id)?.year_level||'':''" :house-id="selected?data.enrolmentMap.value.get(selected.id)?.house_id||'':''" :busy="data.saving.value" @close="editorOpen=false" @save="save"/>
 </div></template>
