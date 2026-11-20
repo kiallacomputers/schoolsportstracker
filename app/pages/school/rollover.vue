@@ -70,7 +70,7 @@ async function execute() {
 </script>
 <template>
   <div class="w-full min-w-0 space-y-6 text-slate-100">
-    <header class="space-y-2 sports-page-heading">
+    <header class="rollover-banner">
       <h1 class="text-3xl font-bold">Student Year Rollover</h1>
       <p class="text-slate-300">{{ schoolName }} · Promote students into the next school year while preserving historical records.</p>
     </header>
@@ -120,3 +120,10 @@ async function execute() {
     </section>
   </div>
 </template>
+
+<style scoped>
+.rollover-banner{display:flex;align-items:center;box-sizing:border-box;position:relative;isolation:isolate;margin:0 0 27px;min-height:190px;padding:30px 34px;border:1px solid #2b4d75;border-radius:16px;background-image:linear-gradient(90deg,rgba(6,17,37,.97) 0%,rgba(6,17,37,.84) 38%,rgba(6,17,37,.24) 100%),url('/images/sports-embossed-header.webp');background-position:center,center 15%;background-size:cover,cover;background-repeat:no-repeat;overflow:hidden;color:#edf5ff}
+.rollover-banner h1{font-size:clamp(27px,3vw,39px);letter-spacing:-.04em;line-height:1.2;margin:0 0 8px;font-weight:800}
+.rollover-banner p{font-size:14px;color:#9eb9d9;margin:0}
+@media(max-width:600px){.rollover-banner{min-height:165px;padding:24px 20px;background-position:center,center 15%}}
+</style>
