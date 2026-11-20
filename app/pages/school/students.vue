@@ -229,9 +229,12 @@ async function importCsv() {
 </script>
 <template>
 <div class="page"><div class="shell admin-section">
-  <NuxtLink :to="`/school/dashboard`">← Students</NuxtLink>
-  <h1>{{schoolName}} — Students</h1>
-  <p class="notice">Student records are restricted to your school. School Administrators can edit, disable and reactivate students. Only SuperAdmins can permanently delete student records.</p>
+  <header class="students-banner">
+    <div>
+      <h1>{{schoolName}} — Students</h1>
+      <p>Student records are restricted to your school. School Administrators can edit, disable and reactivate students. Only SuperAdmins can permanently delete student records.</p>
+    </div>
+  </header>
   <p v-if="error" class="error" role="alert">{{error}}</p><p v-if="notice" class="notice" role="status">{{notice}}</p>
   <div v-if="modalOpen" class="student-modal-backdrop" @click.self="closeModal">
     <section class="student-modal card" role="dialog" aria-modal="true" aria-labelledby="student-modal-title">
@@ -284,6 +287,10 @@ async function importCsv() {
 </template>
 
 <style scoped>
+.students-banner{display:flex;align-items:center;justify-content:space-between;gap:16px;box-sizing:border-box;margin:0 0 27px;min-height:190px;padding:30px 34px;border:1px solid #2b4d75;border-radius:16px;background-image:linear-gradient(90deg,rgba(6,17,37,.97) 0%,rgba(6,17,37,.84) 38%,rgba(6,17,37,.24) 100%),url('/images/sports-embossed-header.webp');background-position:center,center 15%;background-size:cover,cover;background-repeat:no-repeat;overflow:hidden;color:#edf5ff}
+.students-banner h1{font-size:clamp(27px,3vw,39px);letter-spacing:-.04em;margin:0 0 8px;font-weight:800}
+.students-banner p{font-size:14px;color:#9eb9d9;margin:0;max-width:780px}
+@media(max-width:600px){.students-banner{min-height:165px;padding:24px 20px;background-position:center,center 15%}}
 .student-identity { display:flex; align-items:center; gap:.85rem; min-width:0; }
 .student-house-link { text-decoration:none; cursor:pointer; }
 .student-house-link:hover { filter:brightness(1.15); transform:translateY(-1px); }
