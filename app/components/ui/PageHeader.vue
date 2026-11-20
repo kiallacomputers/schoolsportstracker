@@ -1,0 +1,1 @@
+<script setup lang="ts">defineProps<{title:string;description?:string}>()</script><template><header class="mb-7 flex flex-wrap items-center justify-between gap-4"><div><h1 class="text-2xl font-bold tracking-tight">{{title}}</h1><p v-if="description" class="mt-1 text-sm text-[var(--muted)]">{{description}}</p></div><slot name="actions"/></header></template>

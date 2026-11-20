@@ -1,8 +1,0 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-:root { color-scheme: light; }
-.sst-app { --background:#fff;--surface:#fff;--panel:#f3f5f8;--text:#172b45;--muted:#60748c;--border:#dce4ec; font-family:Inter,ui-sans-serif,system-ui,sans-serif; }
-.sst-app[data-theme="dark"] { --background:#0b1628;--surface:#12233a;--panel:#1c304a;--text:#edf4fc;--muted:#adc0d6;--border:#344a65; color-scheme:dark; }
-.sst-app *, .sst-app *::before, .sst-app *::after { box-sizing:border-box; }
-.sst-app button,.sst-app select { color:inherit; }

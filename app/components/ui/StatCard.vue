@@ -1,0 +1,1 @@
+<script setup lang="ts">defineProps<{title:string;value:number|string;description?:string}>()</script><template><UiPanel><p class="text-sm font-semibold text-[var(--muted)]">{{title}}</p><strong class="my-3 block text-3xl font-bold">{{value}}</strong><p class="text-xs text-[var(--muted)]">{{description}}</p></UiPanel></template>
