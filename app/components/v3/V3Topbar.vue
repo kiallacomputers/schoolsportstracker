@@ -1,12 +1,12 @@
 <script setup lang="ts">
-defineProps<{schoolName:string;roleLabel:string;platformAdmin:boolean;themePreference:'light'|'dark'|'system'}>()
-const emit=defineEmits<{toggle:[];theme:[value:'light'|'dark'|'system']}>()
+defineProps<{schoolName:string;roleLabel:string;platformAdmin:boolean;themePreference:'light'|'dark'}>()
+const emit=defineEmits<{toggle:[];theme:[value:'light'|'dark']}>()
 </script>
 <template>
 <header class="v3-topbar">
 <button class="v3-menu-button" type="button" aria-label="Toggle sidebar" @click="emit('toggle')">☰</button>
 <div class="v3-topbar-title"><small>School Sports Tracker</small><strong>{{platformAdmin?'Platform administration':schoolName}}</strong></div>
-<div class="v3-topbar-actions"><label class="v3-appearance"><span>Theme</span><select :value="themePreference" aria-label="Appearance theme" @change="emit('theme',($event.target as HTMLSelectElement).value as 'light'|'dark'|'system')"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><span class="v3-role">{{roleLabel}}</span></div>
+<div class="v3-topbar-actions"><label class="v3-appearance"><span>Theme</span><select :value="themePreference" aria-label="Appearance theme" @change="emit('theme',($event.target as HTMLSelectElement).value as 'light'|'dark')"><option value="light">Light</option><option value="dark">Dark</option></select></label><span class="v3-role">{{roleLabel}}</span></div>
 </header>
 </template>
 <style scoped>
