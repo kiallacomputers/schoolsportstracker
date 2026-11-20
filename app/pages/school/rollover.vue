@@ -69,7 +69,7 @@ async function execute() {
 }
 </script>
 <template>
-  <div class="mx-auto max-w-5xl space-y-6 text-slate-100">
+  <div class="w-full min-w-0 space-y-6 text-slate-100">
     <header class="space-y-2 sports-page-heading">
       <h1 class="text-3xl font-bold">Student Year Rollover</h1>
       <p class="text-slate-300">{{ schoolName }} · Promote students into the next school year while preserving historical records.</p>
