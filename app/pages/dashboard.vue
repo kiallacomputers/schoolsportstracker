@@ -3,6 +3,7 @@ const db = useSupabaseClient()
 const { verify } = useAdmin()
 const route = useRoute()
 const loading = ref(true)
+const loginTransition = useState<boolean>('sst-login-transition', () => false)
 const errorMessage = ref('')
 const isPlatformAdmin = ref(false)
 const memberships = ref<any[]>([])
@@ -79,7 +80,7 @@ onMounted(async () => {
       await loadSchool()
     }
   } catch (e: any) { errorMessage.value = e?.message || 'Unable to load dashboard.' }
-  finally { loading.value = false }
+  finally { loading.value = false; await nextTick(); loginTransition.value = false }
 })
 watch(selectedId, async (id, previous) => { if (id && previous && id !== previous) await loadSchool() })
 async function signOut() { await db.auth.signOut(); await navigateTo('/login') }

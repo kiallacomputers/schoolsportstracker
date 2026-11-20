@@ -3,6 +3,7 @@ const route = useRoute()
 const workspaceRoute = computed(() => route.path === '/dashboard' || route.path.startsWith('/school/') || route.path.startsWith('/admin/') || route.path.startsWith('/teacher/'))
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
+const loginTransition = useState<boolean>('sst-login-transition', () => false)
 
 const profile = ref<any>(null)
 const isAdmin = ref(false)
@@ -53,6 +54,7 @@ const checkRole = async () => {
 }
 
 const logout = async () => {
+  loginTransition.value = false
   await supabase.auth.signOut()
   profile.value = null
   isAdmin.value = false
@@ -85,7 +87,7 @@ onUnmounted(() => {
   <WorkspaceShell v-if="workspaceRoute"><slot /></WorkspaceShell>
   <div v-else class="min-h-screen bg-slate-950 text-slate-100">
     <aside
-      v-if="user"
+      v-if="user && !loginTransition"
       class="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-slate-800 bg-slate-950/95 backdrop-blur md:flex"
     >
       <div class="flex justify-center border-b border-slate-800 px-5 py-6">
@@ -126,7 +128,7 @@ onUnmounted(() => {
     </aside>
 
     <header
-      v-if="user"
+      v-if="user && !loginTransition"
       class="sticky top-0 z-50 flex items-center justify-between border-b border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur md:hidden"
     >
       <NuxtLink to="/dashboard" aria-label="School Sports Tracker dashboard">
@@ -143,7 +145,7 @@ onUnmounted(() => {
     </header>
 
     <div
-      v-if="user && mobileMenuOpen"
+      v-if="user && !loginTransition && mobileMenuOpen"
       class="fixed inset-x-0 top-[89px] z-40 border-b border-slate-800 bg-slate-950 px-4 py-4 shadow-2xl md:hidden"
     >
       <nav class="space-y-2">
@@ -162,7 +164,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div :class="user ? 'md:pl-72' : ''">
+    <div :class="user && !loginTransition ? 'md:pl-72' : ''">
       <slot />
     </div>
   </div>
