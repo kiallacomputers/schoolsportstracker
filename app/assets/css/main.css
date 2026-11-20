@@ -154,3 +154,24 @@ html, body, #__nuxt { min-height: 100%; background-color: var(--sst-page-navy); 
     padding: 18px 14px 38px;
   }
 }
+
+/* V3 unified workspace skin. Public, login and student-facing pages remain unchanged.
+   Existing management pages inherit tokens until their specialised controls are migrated. */
+.v3-workspace .content>.page{width:100%;max-width:1600px;margin-inline:auto;padding:28px 30px;background:transparent!important;background-image:none!important;color:var(--v3-text);min-height:calc(100vh - 74px)}
+.v3-workspace .content>.page.competition-workspace-background{width:100%;max-width:1600px;margin-inline:auto;padding:28px 30px;background:transparent!important;background-image:none!important}
+.v3-workspace .page .admin-section{padding:0 0 40px;background:transparent;color:var(--v3-text)}
+.v3-workspace .page .admin-section::before,.v3-workspace .page .sports-page-heading::before{display:none!important}
+.v3-workspace .page .sports-page-heading{min-height:0;padding:0 0 18px}
+.v3-workspace .page :is(.card,.stat-card,.metric-card,.competition-hero,.panel):not(.v3-keep-dark){background:var(--v3-surface)!important;background-image:none!important;border-color:var(--v3-border)!important;color:var(--v3-text);box-shadow:var(--v3-shadow)}
+.v3-workspace .page :is(.card,.stat-card,.metric-card,.competition-hero,.panel) :is(h1,h2,h3,strong){color:var(--v3-text)}
+.v3-workspace .page :is(.card,.stat-card,.metric-card,.competition-hero,.panel) :is(p,small){color:var(--v3-muted)}
+.v3-workspace .page .admin-section :is(input,select,textarea),.v3-workspace .page .field input{background:var(--v3-surface);color:var(--v3-text);border:1px solid var(--v3-border);border-radius:8px}
+.v3-workspace .page .admin-section label{color:var(--v3-muted)}
+.v3-workspace .page .data-row{border-color:var(--v3-border);color:var(--v3-text)}
+.v3-workspace .page .data-row small{color:var(--v3-muted)}
+.v3-workspace .page .secondary{border-color:var(--v3-border);color:var(--v3-text)}
+.v3-workspace .page .notice{background:var(--v3-surface-alt);color:var(--v3-text)}
+.v3-workspace .page .admin-nav a{background:var(--v3-surface);border-color:var(--v3-border);color:var(--v3-text)}
+.v3-workspace .page .competition-shell{width:100%;max-width:none;padding:0;background:transparent}
+.v3-workspace .page .competition-page{background:transparent}
+@media(max-width:800px){.v3-workspace .content>.page,.v3-workspace .content>.page.competition-workspace-background{padding:18px 14px}}
