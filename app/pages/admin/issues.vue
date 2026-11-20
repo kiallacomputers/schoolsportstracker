@@ -98,9 +98,8 @@ onBeforeUnmount(()=>{window.removeEventListener('keydown',onEscape);document.bod
 <template>
   <div class="issues-page">
     <header class="hero">
-      <div class="crumb">Dashboard <span>›</span> Administration <span>›</span> Improvements &amp; Faults</div>
       <div class="hero-content">
-        <div><div class="eyebrow">PLATFORM MANAGEMENT</div><h1>Improvements &amp; Faults</h1><p>Track problems, development ideas and progress in one place.</p></div>
+        <div><h1>Improvements &amp; Faults</h1><p>Track problems, development ideas and progress in one place.</p></div>
         <button class="primary" @click="error='';success='';selected=null;showCreate=true">＋ New Item</button>
       </div>
     </header>
@@ -172,11 +171,10 @@ onBeforeUnmount(()=>{window.removeEventListener('keydown',onEscape);document.bod
 
 <style>
 .issues-page{max-width:none}
-.hero{position:relative;isolation:isolate;margin:-24px -24px 26px;padding:24px 28px 56px;min-height:230px;background:linear-gradient(90deg,rgba(6,21,42,.97) 0%,rgba(7,27,53,.82) 49%,rgba(7,27,53,.25) 100%),url('/images/sports-embossed-header.webp') center 42%/cover no-repeat;border-bottom:1px solid #315e8c}
-.hero:after{content:'';position:absolute;inset:auto 0 0;height:72px;background:linear-gradient(transparent,#081a31);z-index:-1}
-.hero-content{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:24px}
-.hero h1{font-size:clamp(27px,3vw,38px);margin:8px 0}
-.hero p{color:#bdd4ef;margin:0}
+.hero{display:flex;align-items:center;position:relative;isolation:isolate;box-sizing:border-box;margin:0 0 27px;min-height:190px;padding:30px 34px;border:1px solid #2b4d75;border-radius:16px;background-image:linear-gradient(90deg,rgba(6,17,37,.97) 0%,rgba(6,17,37,.84) 38%,rgba(6,17,37,.24) 100%),url('/images/sports-embossed-header.webp');background-position:center,center 15%;background-size:cover,cover;background-repeat:no-repeat;overflow:hidden}
+.hero-content{display:flex;align-items:center;justify-content:space-between;gap:24px;width:100%}
+.hero h1{font-size:clamp(27px,3vw,39px);letter-spacing:-.04em;margin:0 0 8px}
+.hero p{color:#9eb9d9;margin:0;font-size:14px}
 .page-body{max-width:1600px;margin:0 auto}
 .panel-title p{margin:5px 0 0}
 .issue-list{max-height:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -191,7 +189,7 @@ onBeforeUnmount(()=>{window.removeEventListener('keydown',onEscape);document.bod
 .modal-content label input,.modal-content label select,.modal-content label textarea{display:block;margin-top:6px;font-size:14px;font-weight:400}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;padding-top:8px}
 @media(max-width:900px){.issue-list{grid-template-columns:1fr}}
-@media(max-width:650px){.hero{margin:-12px -12px 18px;padding:22px 16px 42px}.hero-content{align-items:flex-start;flex-direction:column}.issue-modal-backdrop{padding:8px;align-items:flex-end}.issue-modal{max-height:96dvh;border-radius:16px 16px 0 0}.modal-heading,.modal-content{padding:16px}}
+@media(max-width:650px){.hero{margin:0 0 18px;min-height:165px;padding:24px 20px;background-position:center,center 15%}.hero-content{align-items:flex-start;flex-direction:column}.issue-modal-backdrop{padding:8px;align-items:flex-end}.issue-modal{max-height:96dvh;border-radius:16px 16px 0 0}.modal-heading,.modal-content{padding:16px}}
 </style>
 
 <style>
