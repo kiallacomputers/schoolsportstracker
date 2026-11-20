@@ -21,6 +21,7 @@ jobs:
         shell: python
         run: |
           import json
+          from datetime import datetime, timedelta, timezone
           import os
           import pathlib
           import sys
@@ -58,8 +59,18 @@ jobs:
           report = pathlib.Path("netlify-monitor")
           report.mkdir(exist_ok=True)
           failures = []
+          latest_by_context = {}
+          now = datetime.now(timezone.utc)
+          alert_window = timedelta(minutes=30)
+          def parse_time(value):
+              if not value:
+                  return None
+              try:
+                  return datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+              except ValueError:
+                  return None
           rows = ["# School Sports Tracker — Netlify deployments", "",
-                  "Latest 20 deployments checked for site `" + site + "`.", "",
+                  "Latest 20 deployments checked for site `" + site + "`. Alerts apply only to the newest deployment per context when failed within the last 30 minutes.", "",
                   "| Deploy | Context | State | Updated |", "|---|---|---|---|"]
 
           for deploy in deployments:
@@ -69,10 +80,22 @@ jobs:
               updated = str(deploy.get("updated_at") or deploy.get("created_at") or "")
               link = "https://app.netlify.com/sites/" + site + "/deploys/" + urllib.parse.quote(deploy_id)
               rows.append(f"| [`{deploy_id[:12]}`]({link}) | {context} | {state} | {updated} |")
-              if state.lower() in ("error", "failed"):
-                  failures.append({"id": deploy_id, "context": context, "state": state,
-                                   "created_at": deploy.get("created_at"),
-                                   "updated_at": updated, "deploy_url": link,
+              stamp = parse_time(deploy.get("created_at"))
+              current = latest_by_context.get(context)
+              if current is None or (stamp is not None and (current["stamp"] is None or stamp > current["stamp"])):
+                  latest_by_context[context] = {"deploy": deploy, "stamp": stamp, "link": link}
+
+          for context, item in latest_by_context.items():
+              deploy = item["deploy"]
+              state = str(deploy.get("state") or "unknown")
+              updated_time = parse_time(deploy.get("updated_at")) or item["stamp"]
+              # Ignore historical failures and superseded deployments. A 30-minute
+              # window allows for GitHub schedule delays without alerting forever.
+              if state.lower() in ("error", "failed") and updated_time and timedelta(0) <= now - updated_time <= alert_window:
+                  failures.append({"id": str(deploy.get("id") or ""), "context": context,
+                                   "state": state, "created_at": deploy.get("created_at"),
+                                   "updated_at": deploy.get("updated_at"),
+                                   "deploy_url": item["link"],
                                    "error_message": deploy.get("error_message")})
 
           if failures:
@@ -96,14 +119,14 @@ jobs:
               json.dumps({"site_id": site, "deployments": [
                   {"id": d.get("id"), "state": d.get("state"), "context": d.get("context"),
                    "created_at": d.get("created_at"), "updated_at": d.get("updated_at")}
-                  for d in deployments], "failures": failures}, indent=2), encoding="utf-8")
+                  for d in deployments], "failures": failures, "alert_policy": "latest deployment per context, failed within 30 minutes"}, indent=2), encoding="utf-8")
 
           summary = "\n".join(rows) + "\n"
           (report / "summary.md").write_text(summary, encoding="utf-8")
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
               out.write(summary)
 
-          print(f"Checked {len(deployments)} deployments; found {len(failures)} failures.")
+          print(f"Checked {len(deployments)} deployments; found {len(failures)} current recent failures.")
           if failures:
               print("::error::Netlify deployment failures found. See the job summary and uploaded report.")
               sys.exit(1)
