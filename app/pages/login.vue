@@ -1,7 +1,6 @@
 <script setup lang="ts">
 const route = useRoute()
 const supabase = useSupabaseClient()
-const transitioning = useState<boolean>('sst-login-transition', () => false)
 const email = ref('')
 const password = ref('')
 const errorMessage = ref('')
@@ -14,8 +13,6 @@ async function signIn() {
   try {
     const { error } = await supabase.auth.signInWithPassword({ email: email.value, password: password.value })
     if (error) throw error
-    // Cover the layout while Supabase session and workspace navigation settle.
-    transitioning.value = true
     const { data: role, error: roleError } = await supabase.rpc('is_platform_admin')
     if (roleError) throw roleError
     const { data: { user }, error: userError } = await supabase.auth.getUser()
@@ -30,7 +27,6 @@ async function signIn() {
       ? route.query.redirect : ''
     await navigateTo(redirect || (role === true ? '/dashboard' : schoolUser ? '/school/dashboard' : '/student'), { replace: true })
   } catch (error: any) {
-    transitioning.value = false
     errorMessage.value = error?.message || 'Unable to sign in. Please try again.'
   } finally {
     busy.value = false
