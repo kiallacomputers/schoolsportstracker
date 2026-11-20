@@ -13,8 +13,8 @@ const teachers=computed(()=>members.value.filter(m=>m.role==='teacher').length)
 const pending=computed(()=>requests.value.filter(r=>r.status==='pending').length)
 const inviteStatus=(i:Invitation)=>i.revoked_at?'Revoked':i.accepted_at?'Accepted':new Date(i.expires_at).getTime()<Date.now()?'Expired':'Pending'
 async function load(){if(!schoolId.value){members.value=[];requests.value=[];invitations.value=[];return}loading.value=true;error.value='';try{
-const m=await db.from('school_memberships').select('user_id,role,profiles(display_name)').eq('school_id',schoolId.value)
-if(m.error)throw m.error;members.value=(m.data||[]) as unknown as Member[]
+const m=await db.from('school_memberships').select('user_id,role').eq('school_id',schoolId.value)
+if(m.error)throw m.error;const raw=(m.data||[]) as {user_id:string;role:string}[];const ids=raw.map(x=>x.user_id);const p=ids.length?await db.from('profiles').select('id,display_name').in('id',ids):{data:[],error:null};if(p.error)throw p.error;const names=new Map((p.data||[]).map(x=>[x.id,x.display_name]));members.value=raw.map(x=>({...x,profiles:{display_name:names.get(x.user_id)||null}}))
 if(canManage.value){const [r,i]=await Promise.all([db.from('school_staff_requests').select('id,user_id,email,given_name,family_name,status,created_at').eq('school_id',schoolId.value).order('created_at',{ascending:false}),db.from('school_staff_invitations').select('id,email,expires_at,accepted_at,revoked_at,created_at').eq('school_id',schoolId.value).order('created_at',{ascending:false})]);if(r.error||i.error)throw r.error||i.error;requests.value=(r.data||[]) as Request[];invitations.value=(i.data||[]) as Invitation[]}else{requests.value=[];invitations.value=[]}
 }catch(e:any){error.value=e.message||'Unable to load staff'}finally{loading.value=false}}
 watch([schoolId,canManage],()=>{open.value=false;void load()},{immediate:true})
