@@ -23,6 +23,11 @@ export default defineEventHandler(async (event) => {
   if (!lookup.ok) throw createError({ statusCode: 503, statusMessage: 'Invitation verification unavailable' })
   const email = await lookup.json() as string | null
   if (!email) throw createError({ statusCode: 400, statusMessage: 'Invitation invalid or expired' })
+  if(kind==='staff') {
+    const check=await fetch(`${url}/rest/v1/rpc/check_staff_invitation_eligibility`,{method:'POST',headers,body:JSON.stringify({p_email:email})})
+    if(!check.ok)throw createError({statusCode:503,statusMessage:'Unable to verify staff eligibility'})
+    if((await check.json())!==true)throw createError({statusCode:403,statusMessage:'This email belongs to a student and cannot be registered as staff'})
+  }
   // Admin createUser does not send Supabase confirmation or invitation emails.
   const created = await fetch(`${url}/auth/v1/admin/users`, {
     method: 'POST', headers,
