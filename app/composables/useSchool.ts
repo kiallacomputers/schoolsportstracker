@@ -2,7 +2,8 @@ type School = {id:string;name:string}
 const schoolOptions = ref<School[]>([])
 const schoolId = ref('')
 const platformAdmin = ref(false)
-const schoolRole = ref('')
+const membershipRoles = ref<Record<string,string>>({})
+const schoolRole = computed(()=>platformAdmin.value?'platform_admin':membershipRoles.value[schoolId.value]||'')
 export function useSchool() {
   const db = useSupabaseClient()
   async function load() {
@@ -12,6 +13,7 @@ export function useSchool() {
     const {data:admin,error:adminError}=await db.rpc('is_platform_admin')
     if(adminError) throw adminError
     platformAdmin.value = admin === true
+    membershipRoles.value={}
     if(platformAdmin.value) {
       const {data,error}=await db.from('schools').select('id,name').order('name')
       if(error) throw error
@@ -21,7 +23,7 @@ export function useSchool() {
       if(error) throw error
       const memberships=(data||[]).filter((m:any)=>['teacher','school_admin'].includes(m.role))
       schoolOptions.value=memberships.map((m:any)=>({id:m.school_id,name:m.schools?.name||'School'}))
-      schoolRole.value=memberships[0]?.role||''
+      membershipRoles.value=Object.fromEntries(memberships.map((m:any)=>[m.school_id,m.role]))
     }
     if(!schoolOptions.value.some(s=>s.id===schoolId.value)) schoolId.value=schoolOptions.value[0]?.id||''
     return true
