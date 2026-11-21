@@ -40,7 +40,7 @@ const benefits=[{number:'01',title:'Plan with confidence',description:'Bring com
           <div class="absolute -inset-3 rotate-2 rounded-[2.5rem] bg-[#d9e9fc]" aria-hidden="true"></div>
           <div class="relative overflow-hidden rounded-[2rem] border-[6px] border-white bg-[#dbeafe] shadow-2xl shadow-[#adc5df]/60">
             <img src="https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=1400&q=90" alt="Athletics competitors taking part in a sporting event" class="h-[340px] w-full object-cover sm:h-[490px] lg:h-[530px]" />
-            <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#102944]/95 via-[#102944]/55 to-transparent px-7 pb-24 pt-28 text-white sm:pb-28">
+            <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#102944]/95 via-[#102944]/55 to-transparent px-7 pb-[5px] pt-28 text-white">
               <p class="text-xs font-bold uppercase tracking-[.2em] text-blue-200">The moments that matter</p>
               <p class="mt-2 text-2xl font-extrabold sm:text-3xl">Let every achievement shine.</p>
             </div>
