@@ -40,12 +40,12 @@ const benefits=[{number:'01',title:'Plan with confidence',description:'Bring com
           <div class="absolute -inset-3 rotate-2 rounded-[2.5rem] bg-[#d9e9fc]" aria-hidden="true"></div>
           <div class="relative overflow-hidden rounded-[2rem] border-[6px] border-white bg-[#dbeafe] shadow-2xl shadow-[#adc5df]/60">
             <img src="https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=1400&q=90" alt="Athletics competitors taking part in a sporting event" class="h-[340px] w-full object-cover sm:h-[490px] lg:h-[530px]" />
-            <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#102944]/90 via-[#102944]/45 to-transparent px-7 pb-8 pt-28 text-white">
+            <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#102944]/95 via-[#102944]/55 to-transparent px-7 pb-24 pt-28 text-white sm:pb-28">
               <p class="text-xs font-bold uppercase tracking-[.2em] text-blue-200">The moments that matter</p>
               <p class="mt-2 text-2xl font-extrabold sm:text-3xl">Let every achievement shine.</p>
             </div>
           </div>
-          <div class="absolute -bottom-6 -left-3 rounded-2xl border border-[#e1eaf4] bg-white px-5 py-4 shadow-xl sm:-left-8"><div class="flex items-center gap-3"><span class="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="m8 13-2 9 6-3 6 3-2-9"/></svg></span><div><p class="text-sm font-extrabold text-[#172b45]">Celebrate success</p><p class="text-xs text-[#61738a]">From participation to records</p></div></div></div>
+          <div class="relative z-10 mx-4 -mt-8 w-fit max-w-[calc(100%-2rem)] rounded-2xl border border-[#e1eaf4] bg-white px-5 py-4 shadow-xl sm:mx-6 sm:-mt-9"><div class="flex items-center gap-3"><span class="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="m8 13-2 9 6-3 6 3-2-9"/></svg></span><div><p class="text-sm font-extrabold text-[#172b45]">Celebrate success</p><p class="text-xs text-[#61738a]">From participation to records</p></div></div></div>
         </div>
       </div>
     </section>
