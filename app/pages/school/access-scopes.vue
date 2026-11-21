@@ -1,0 +1,51 @@
+<script setup lang="ts">
+definePageMeta({layout:'workspace'})
+type Scope={id:string;name:string;description:string;permissions:string[]}
+type Member={user_id:string;role:string;profiles:{display_name:string|null}|null}
+type Assignment={scope_id:string;user_id:string}
+const groups=[["Students",["students.view","students.create","students.edit"]],["Houses",["houses.view","houses.create","houses.edit"]],["Staff",["staff.view"]],["Competitions",["competitions.view","competitions.create","competitions.edit","competitions.manage"]],["Registrations",["registrations.view","registrations.create","registrations.edit"]],["Race day",["race_day.view","race_day.manage","race_day.enter_results"]],["Results",["results.view","results.edit","results.publish"]],["Records & reports",["records.view","records.export","records.manage"]],["School settings",["school_settings.manage"]]]
+const db=useSupabaseClient(),{schoolId,schoolRole,platformAdmin}=useSchool()
+const admin=computed(()=>platformAdmin.value||schoolRole.value==='school_admin')
+const scopes=ref<Scope[]>([]),members=ref<Member[]>([]),assignments=ref<Assignment[]>([])
+const loading=ref(false),saving=ref(false),error=ref(''),notice=ref(''),dialog=ref(false),confirm=ref(false),selected=ref<Scope|null>(null)
+const form=reactive({name:'',description:'',permissions:[] as string[]})
+const search=ref('')
+const filtered=computed(()=>scopes.value.filter(s=>s.name.toLowerCase().includes(search.value.toLowerCase())))
+const assigned=(id:string)=>assignments.value.filter(a=>a.scope_id===id).length
+const memberScopes=(id:string)=>assignments.value.filter(a=>a.user_id===id).map(a=>a.scope_id)
+async function load(){if(!schoolId.value||!admin.value){scopes.value=[];members.value=[];assignments.value=[];return}loading.value=true;error.value='';try{
+const [s,m,a]=await Promise.all([db.from('school_access_scopes').select('id,name,description,permissions').eq('school_id',schoolId.value).order('name'),db.from('school_memberships').select('user_id,role').eq('school_id',schoolId.value),db.from('school_staff_scope_assignments').select('user_id,scope_id').eq('school_id',schoolId.value)])
+if(s.error||m.error||a.error)throw s.error||m.error||a.error
+scopes.value=(s.data||[]) as Scope[];assignments.value=(a.data||[]) as Assignment[]
+const raw=(m.data||[]) as {user_id:string;role:string}[]
+const p=raw.length?await db.from('profiles').select('id,display_name').in('id',raw.map(x=>x.user_id)):{data:[],error:null}
+if(p.error)throw p.error
+const names=new Map((p.data||[]).map(x=>[x.id,x.display_name]))
+members.value=raw.map(x=>({...x,profiles:{display_name:names.get(x.user_id)||null}}))
+}catch(e:any){error.value=e.message||'Unable to load access scopes'}finally{loading.value=false}}
+function create(){selected.value=null;Object.assign(form,{name:'',description:'',permissions:[]});dialog.value=true;confirm.value=false}
+function edit(s:Scope){selected.value=s;Object.assign(form,{name:s.name,description:s.description,permissions:[...s.permissions]});dialog.value=true;confirm.value=false}
+function toggle(p:string,checked:boolean){form.permissions=checked?[...new Set([...form.permissions,p])]:form.permissions.filter(x=>x!==p)}
+function cancel(){confirm.value=false;dialog.value=false}
+async function save(){if(!admin.value||saving.value)return;saving.value=true;confirm.value=false;error.value='';try{
+const payload={name:form.name.trim(),description:form.description.trim(),permissions:form.permissions}
+if(!payload.name)throw Error('Scope name is required')
+const q=selected.value?db.from('school_access_scopes').update(payload).eq('school_id',schoolId.value).eq('id',selected.value.id):db.from('school_access_scopes').insert({...payload,school_id:schoolId.value})
+const r=await q.select('id').single();if(r.error)throw r.error
+await load();dialog.value=false;notice.value='Access scope saved'
+}catch(e:any){error.value=e.message||'Unable to save scope'}finally{saving.value=false}}
+async function assign(userId:string,scopeId:string,checked:boolean){if(!admin.value||saving.value)return;saving.value=true;error.value='';notice.value='';try{
+const r=checked?await db.from('school_staff_scope_assignments').insert({school_id:schoolId.value,user_id:userId,scope_id:scopeId,assigned_by:(await db.auth.getUser()).data.user?.id}):await db.from('school_staff_scope_assignments').delete().eq('school_id',schoolId.value).eq('user_id',userId).eq('scope_id',scopeId)
+if(r.error)throw r.error;await load();notice.value='Staff access scopes updated'
+}catch(e:any){error.value=e.message||'Unable to update assignment'}finally{saving.value=false}}
+watch([schoolId,admin],()=>{dialog.value=false;void load()},{immediate:true})
+</script>
+<template><div class="space-y-6">
+<div class="flex flex-wrap items-center justify-between gap-3"><div><h1 class="text-xl font-bold">Access Scopes</h1><p class="text-sm text-[var(--muted)]">Create reusable permission groups and assign them to staff in this school.</p></div><button v-if="admin" class="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white" @click="create">+ Create scope</button></div>
+<p v-if="error" role="alert" class="rounded-xl bg-red-50 p-4 text-red-700">{{error}}</p><p v-if="notice" role="status" class="text-sm text-green-700">{{notice}}</p>
+<p v-if="!admin" class="rounded-xl border border-[var(--border)] p-4">Only Platform Administrators and School Super Admins can manage access scopes.</p>
+<template v-else><UiPanel><div class="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 class="text-lg font-bold">School access scopes ({{scopes.length}})</h2><input v-model="search" aria-label="Search scopes" placeholder="Search scopes" class="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"/></div><p v-if="loading">Loading scopes…</p><div v-else class="space-y-2"><div v-for="s in filtered" :key="s.id" class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] p-4"><div><strong>{{s.name}}</strong><p class="text-sm text-[var(--muted)]">{{s.description||'No description'}} · {{s.permissions.length}} permissions · {{assigned(s.id)}} staff</p></div><button class="rounded-lg border border-[var(--border)] px-4 py-2 text-blue-600" @click="edit(s)">View / Edit</button></div><p v-if="!filtered.length" class="py-6 text-center text-[var(--muted)]">No scopes found.</p></div></UiPanel>
+<UiPanel><h2 class="mb-2 text-lg font-bold">Assign scopes to staff</h2><p class="mb-4 text-sm text-[var(--muted)]">Staff may have multiple scopes. Permissions are combined. School Super Admins and Platform Admins retain full access.</p><UiHoverScrollbar max-height="26rem"><div v-for="m in members" :key="m.user_id" class="border-b border-[var(--border)] py-4"><div class="mb-2 flex flex-wrap items-center gap-2"><strong>{{m.profiles?.display_name||'Name not provided'}}</strong><span class="text-xs text-[var(--muted)]">({{m.role==='school_admin'?'School Super Admin':m.role}})</span></div><div class="flex flex-wrap gap-x-5 gap-y-2"><label v-for="s in scopes" :key="s.id" class="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" :checked="memberScopes(m.user_id).includes(s.id)" :disabled="saving||m.role==='school_admin'" @change="assign(m.user_id,s.id,($event.target as HTMLInputElement).checked)"/>{{s.name}}</label><span v-if="!scopes.length" class="text-sm text-[var(--muted)]">Create a scope to assign it.</span></div></div><p v-if="!members.length" class="py-4 text-sm text-[var(--muted)]">No staff memberships found.</p></UiHoverScrollbar></UiPanel></template>
+<div v-if="dialog" class="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"><section role="dialog" aria-modal="true" aria-label="Edit access scope" class="w-full max-w-2xl rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl"><UiHoverScrollbar max-height="calc(90vh - 48px)"><header class="mb-4 flex items-center justify-between"><h2 class="text-xl font-bold">{{selected?'Edit scope':'Create scope'}}</h2><button aria-label="Close" @click="cancel">✕</button></header><form class="space-y-4" @submit.prevent="confirm=true"><label class="block text-sm font-semibold">Scope name<input v-model="form.name" required maxlength="100" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label><label class="block text-sm font-semibold">Description<textarea v-model="form.description" rows="2" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label><h3 class="font-semibold">Permissions</h3><div v-for="[category,permissions] in groups" :key="category" class="rounded-xl border border-[var(--border)] p-3"><h4 class="mb-2 font-semibold">{{category}}</h4><div class="grid gap-2 sm:grid-cols-2"><label v-for="p in permissions" :key="p" class="flex items-center gap-2 text-sm"><input type="checkbox" :checked="form.permissions.includes(p)" @change="toggle(p,($event.target as HTMLInputElement).checked)"/>{{p.split('.').slice(1).join(' ').replaceAll('_',' ')}}</label></div></div><div class="flex justify-end gap-3"><button type="button" class="rounded-xl border border-[var(--border)] px-5 py-3" @click="cancel">Cancel</button><button class="rounded-xl bg-blue-600 px-5 py-3 text-white" :disabled="saving">Save scope</button></div></form></UiHoverScrollbar></section></div>
+<div v-if="confirm" class="fixed inset-0 z-[60] grid place-items-center bg-black/65 p-4"><section role="alertdialog" aria-modal="true" class="w-full max-w-sm rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-2xl"><h3 class="text-lg font-bold">Save access scope?</h3><p class="mt-3">Save the permissions for {{form.name}}? Changes to an existing scope affect all assigned staff.</p><div class="mt-6 flex justify-end gap-3"><button class="rounded-xl border border-[var(--border)] px-4 py-2" @click="confirm=false">Cancel</button><button class="rounded-xl bg-blue-600 px-4 py-2 text-white" @click="save">Yes, save</button></div></section></div>
+</div></template>
