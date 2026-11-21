@@ -7,16 +7,10 @@ const heroImages=[
 {src:'https://unsplash.com/photos/vWBJFk9iIro/download?force=true&w=1400',alt:'Long jump field event at an athletics stadium'}
 ]
 const heroIndex=ref(0)
-const heroLoaded=ref([false,false,false])
-function onHeroLoad(index:number){heroLoaded.value[index]=true}
-function onHeroError(index:number){heroLoaded.value[index]=false}
-function advanceHero(){for(let offset=1;offset<=heroImages.length;offset++){const next=(heroIndex.value+offset)%heroImages.length;if(heroLoaded.value[next]){heroIndex.value=next;break}}}
 let heroTimer:ReturnType<typeof setInterval>|undefined
-let motionPreference:MediaQueryList|undefined
-function stopHero(){if(heroTimer){clearInterval(heroTimer);heroTimer=undefined}}
-function syncHeroMotion(){stopHero();if(!motionPreference?.matches)heroTimer=setInterval(()=>{advanceHero()},5000)}
-onMounted(()=>{motionPreference=window.matchMedia('(prefers-reduced-motion: reduce)');motionPreference.addEventListener('change',syncHeroMotion);syncHeroMotion()})
-onBeforeUnmount(()=>{stopHero();motionPreference?.removeEventListener('change',syncHeroMotion)})
+function advanceHero(){heroIndex.value=(heroIndex.value+1)%heroImages.length}
+onMounted(()=>{heroTimer=setInterval(advanceHero,5000)})
+onBeforeUnmount(()=>{if(heroTimer)clearInterval(heroTimer)})
 const sports=[
 {title:'Athletics',description:'From track to field, make every school athletics event count.',image:'https://images.unsplash.com/photo-1552674605-db6ffd4facb5?auto=format&fit=crop&w=1000&q=85',alt:'Runners on an athletics track'},
 {title:'Swimming',description:'Bring clarity and excitement to swimming carnivals and race-day results.',image:'https://images.unsplash.com/photo-1530549387789-4c1017266635?auto=format&fit=crop&w=1000&q=85',alt:'Swimming pool lanes'},
@@ -56,7 +50,7 @@ const benefits=[{number:'01',title:'Plan with confidence',description:'Bring com
           <div class="absolute -left-[8px] -right-[8px] -top-[8px] bottom-[8px] rotate-1 rounded-[2.2rem] bg-[#d9e9fc]" aria-hidden="true"></div>
           <div class="relative overflow-hidden rounded-[2rem] border-[6px] border-white bg-white shadow-xl shadow-slate-900/15">
             <div class="relative h-[340px] w-full sm:h-[490px] lg:h-[530px]">
-              <img v-for="(photo,index) in heroImages" :key="photo.src" :src="photo.src" :alt="index===heroIndex?photo.alt:''" :aria-hidden="index!==heroIndex" :class="index===heroIndex?'opacity-100':'opacity-0'" class="absolute inset-0 h-full w-full object-cover transition-opacity duration-[1500ms] ease-in-out motion-reduce:transition-none" loading="eager" decoding="async" @load="onHeroLoad(index)" @error="onHeroError(index)" />
+              <img v-for="(photo,index) in heroImages" :key="photo.src" :src="photo.src" :alt="index===heroIndex?photo.alt:''" :aria-hidden="index!==heroIndex" :class="index===heroIndex?'opacity-100':'opacity-0'" class="absolute inset-0 h-full w-full object-cover transition-opacity duration-[1500ms] ease-in-out motion-reduce:transition-none" loading="eager" decoding="async" />
             </div>
             <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#102944]/95 via-[#102944]/55 to-transparent px-7 pb-[37px] pt-28 text-white sm:pb-[41px]">
               <p class="text-xs font-bold uppercase tracking-[.2em] text-blue-200">The moments that matter</p>
