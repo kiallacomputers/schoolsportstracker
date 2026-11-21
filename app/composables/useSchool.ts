@@ -8,8 +8,14 @@ export function useSchool() {
   const db = useSupabaseClient()
   async function load() {
     const {data:{user},error} = await db.auth.getUser()
-    if(error) throw error
-    if(!user) return false
+    if(error || !user) {
+      platformAdmin.value = false
+      membershipRoles.value = {}
+      schoolOptions.value = []
+      schoolId.value = ''
+      if(error) throw error
+      return false
+    }
     const {data:admin,error:adminError}=await db.rpc('is_platform_admin')
     if(adminError) throw adminError
     platformAdmin.value = admin === true
