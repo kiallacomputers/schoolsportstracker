@@ -7,10 +7,14 @@ const heroImages=[
 {src:'https://unsplash.com/photos/vWBJFk9iIro/download?force=true&w=1400',alt:'Long jump field event at an athletics stadium'}
 ]
 const heroIndex=ref(0)
+const heroLoaded=ref([false,false,false])
+function onHeroLoad(index:number){heroLoaded.value[index]=true}
+function onHeroError(index:number){heroLoaded.value[index]=false}
+function advanceHero(){for(let offset=1;offset<=heroImages.length;offset++){const next=(heroIndex.value+offset)%heroImages.length;if(heroLoaded.value[next]){heroIndex.value=next;break}}}
 let heroTimer:ReturnType<typeof setInterval>|undefined
 let motionPreference:MediaQueryList|undefined
 function stopHero(){if(heroTimer){clearInterval(heroTimer);heroTimer=undefined}}
-function syncHeroMotion(){stopHero();if(!motionPreference?.matches)heroTimer=setInterval(()=>{heroIndex.value=(heroIndex.value+1)%heroImages.length},5000)}
+function syncHeroMotion(){stopHero();if(!motionPreference?.matches)heroTimer=setInterval(()=>{advanceHero()},5000)}
 onMounted(()=>{motionPreference=window.matchMedia('(prefers-reduced-motion: reduce)');motionPreference.addEventListener('change',syncHeroMotion);syncHeroMotion()})
 onBeforeUnmount(()=>{stopHero();motionPreference?.removeEventListener('change',syncHeroMotion)})
 const sports=[
@@ -49,9 +53,10 @@ const benefits=[{number:'01',title:'Plan with confidence',description:'Bring com
           <p class="mt-6 flex items-center gap-2 text-sm font-medium text-[#61738a]"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>Compete · Achieve · Inspire</p>
         </div>
         <div class="relative mx-auto w-full max-w-[640px]">
-          <div class="relative overflow-hidden rounded-[2rem] border-[6px] border-white bg-white shadow-2xl shadow-[#adc5df]/60">
+          <div class="absolute -left-[8px] -right-[8px] -top-[8px] bottom-[8px] rotate-1 rounded-[2.2rem] bg-[#d9e9fc]" aria-hidden="true"></div>
+          <div class="relative overflow-hidden rounded-[2rem] border-[6px] border-white bg-white shadow-xl shadow-slate-900/15">
             <div class="relative h-[340px] w-full sm:h-[490px] lg:h-[530px]">
-              <img v-for="(photo,index) in heroImages" :key="photo.src" :src="photo.src" :alt="photo.alt" :aria-hidden="index!==heroIndex" :class="index===heroIndex?'opacity-100':'opacity-0'" class="absolute inset-0 h-full w-full object-cover transition-opacity duration-[1500ms] ease-in-out motion-reduce:transition-none" :loading="index===0?'eager':'lazy'" />
+              <img v-for="(photo,index) in heroImages" :key="photo.src" :src="photo.src" :alt="index===heroIndex?photo.alt:''" :aria-hidden="index!==heroIndex" :class="index===heroIndex?'opacity-100':'opacity-0'" class="absolute inset-0 h-full w-full object-cover transition-opacity duration-[1500ms] ease-in-out motion-reduce:transition-none" loading="eager" decoding="async" @load="onHeroLoad(index)" @error="onHeroError(index)" />
             </div>
             <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#102944]/95 via-[#102944]/55 to-transparent px-7 pb-[37px] pt-28 text-white sm:pb-[41px]">
               <p class="text-xs font-bold uppercase tracking-[.2em] text-blue-200">The moments that matter</p>
