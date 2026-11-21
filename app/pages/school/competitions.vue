@@ -9,6 +9,53 @@ const competitions=ref<Competition[]>([])
 const sports=ref<Sport[]>([])
 const loading=ref(false),busy=ref(false),error=ref(''),notice=ref('')
 const search=ref(''),statusFilter=ref('all'),dialog=ref(false),confirmSave=ref(false),selected=ref<Competition|null>(null)
+type EventDefinition={id:string;sport_id:string;name:string;measurement:string}
+type CompetitionEvent={id:string;competition_id:string;event_definition_id:string;age_group:string|null;division:string|null;is_team:boolean;min_age:number|null;max_age:number|null;max_participants:number|null}
+const definitions=ref<EventDefinition[]>([]),events=ref<CompetitionEvent[]>([])
+const eventCompetition=ref<Competition|null>(null),eventDialog=ref(false),eventConfirm=ref(false),eventDelete=ref(false),eventSelected=ref<CompetitionEvent|null>(null),eventBusy=ref(false),eventLoading=ref(false)
+const eventForm=reactive({event_definition_id:'',age_group:'',division:'',is_team:false,min_age:'',max_age:'',max_participants:''})
+const availableDefinitions=computed(()=>definitions.value.filter(d=>d.sport_id===eventCompetition.value?.sport_id))
+function eventName(id:string){return definitions.value.find(d=>d.id===id)?.name||'Unknown event'}
+function eventMeasurement(id:string){return definitions.value.find(d=>d.id===id)?.measurement||''}
+async function openEvents(c:Competition){
+ eventCompetition.value=c;eventDialog.value=false;eventConfirm.value=false;eventDelete.value=false;eventSelected.value=null;events.value=[];error.value='';eventLoading.value=true
+ try{
+  const [d,e]=await Promise.all([db.from('event_definitions').select('id,sport_id,name,measurement').eq('sport_id',c.sport_id||''),db.from('competition_events').select('id,competition_id,event_definition_id,age_group,division,is_team,min_age,max_age,max_participants').eq('competition_id',c.id)])
+  if(d.error||e.error)throw d.error||e.error
+  definitions.value=d.data||[];events.value=e.data||[]
+ }catch(e:any){error.value=e.message||'Unable to load events'}
+ finally{eventLoading.value=false}
+}
+function newEvent(){eventSelected.value=null;Object.assign(eventForm,{event_definition_id:availableDefinitions.value[0]?.id||'',age_group:'',division:'',is_team:false,min_age:'',max_age:'',max_participants:''});eventConfirm.value=false;eventDialog.value=true}
+function editEvent(e:CompetitionEvent){eventSelected.value=e;Object.assign(eventForm,{event_definition_id:e.event_definition_id,age_group:e.age_group||'',division:e.division||'',is_team:e.is_team,min_age:e.min_age?.toString()||'',max_age:e.max_age?.toString()||'',max_participants:e.max_participants?.toString()||''});eventConfirm.value=false;eventDialog.value=true}
+function requestEventSave(){if(!eventBusy.value)eventConfirm.value=true}
+async function saveEvent(){
+ if(eventBusy.value||!eventCompetition.value||!canEdit(eventCompetition.value))return
+ eventBusy.value=true;error.value=''
+ try{
+  if(!availableDefinitions.value.some(d=>d.id===eventForm.event_definition_id))throw new Error('Select a valid event for this sport')
+  const min=eventForm.min_age===''?null:Number(eventForm.min_age),max=eventForm.max_age===''?null:Number(eventForm.max_age),cap=eventForm.max_participants===''?null:Number(eventForm.max_participants)
+  if([min,max].some(n=>n!==null&&(!Number.isInteger(n)||n<3||n>30))||(min!==null&&max!==null&&min>max))throw new Error('Age limits must be between 3 and 30, with minimum not exceeding maximum')
+  if(cap!==null&&(!Number.isInteger(cap)||cap<1||cap>10000))throw new Error('Participant limit must be between 1 and 10000')
+  const payload={event_definition_id:eventForm.event_definition_id,age_group:eventForm.age_group.trim()||null,division:eventForm.division.trim()||null,is_team:eventForm.is_team,min_age:min,max_age:max,max_participants:cap}
+  const result=eventSelected.value?await db.from('competition_events').update(payload).eq('id',eventSelected.value.id).eq('competition_id',eventCompetition.value.id):await db.from('competition_events').insert({...payload,competition_id:eventCompetition.value.id})
+  if(result.error)throw result.error
+  eventConfirm.value=false;eventDialog.value=false;notice.value=eventSelected.value?'Event updated successfully':'Event added successfully'
+  await openEvents(eventCompetition.value)
+ }catch(e:any){error.value=e.message||'Unable to save event';eventConfirm.value=false}
+ finally{eventBusy.value=false}
+}
+async function deleteEvent(){
+ if(eventBusy.value||!eventSelected.value||!eventCompetition.value||!canEdit(eventCompetition.value))return
+ eventBusy.value=true;error.value=''
+ try{
+  const {error:e}=await db.from('competition_events').delete().eq('id',eventSelected.value.id).eq('competition_id',eventCompetition.value.id)
+  if(e)throw e
+  eventDelete.value=false;eventDialog.value=false;notice.value='Event removed successfully'
+  await openEvents(eventCompetition.value)
+ }catch(e:any){error.value=e.message||'Unable to remove event';eventDelete.value=false}
+ finally{eventBusy.value=false}
+}
 const statuses=['draft','registration','active','completed','archived']
 const form=reactive({name:'',sport_id:'',school_year:new Date().getFullYear(),starts_on:'',status:'draft'})
 const visible=computed(()=>competitions.value.filter(c=>(statusFilter.value==='all'||c.status===statusFilter.value)&&[c.name,c.school_year,sportName(c.sport_id)].join(' ').toLowerCase().includes(search.value.toLowerCase())))
@@ -76,7 +123,7 @@ watch(schoolId,()=>{confirmSave.value=false;dialog.value=false;void load()},{imm
   <p v-if="loading">Loading competitions…</p>
   <div v-else class="overflow-x-auto"><table class="w-full min-w-[650px] text-left text-sm">
    <thead><tr class="border-b border-[var(--border)] text-[var(--muted)]"><th class="py-3">Competition</th><th class="p-3">Sport</th><th class="p-3">School year</th><th class="p-3">Date</th><th class="p-3">Status</th><th class="p-3">Action</th></tr></thead>
-   <tbody><tr v-for="c in visible" :key="c.id" class="border-b border-[var(--border)]"><td class="py-4 font-semibold">{{c.name}}</td><td class="p-3">{{sportName(c.sport_id)}}</td><td class="p-3">{{c.school_year}}</td><td class="p-3">{{c.starts_on||'Not scheduled'}}</td><td class="p-3 capitalize">{{c.status.replaceAll('_',' ')}}</td><td class="p-3"><button v-if="canEdit(c)"  :aria-label="'Edit '+c.name" :title="'Edit '+c.name" class="rounded-lg border border-[var(--border)] p-2 text-blue-600" @click="edit(c)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg></button><span v-else class="text-xs text-[var(--muted)]">View only</span></td></tr></tbody>
+   <tbody><tr v-for="c in visible" :key="c.id" class="border-b border-[var(--border)]"><td class="py-4 font-semibold">{{c.name}}</td><td class="p-3">{{sportName(c.sport_id)}}</td><td class="p-3">{{c.school_year}}</td><td class="p-3">{{c.starts_on||'Not scheduled'}}</td><td class="p-3 capitalize">{{c.status.replaceAll('_',' ')}}</td><td class="p-3"><div class="flex items-center gap-2"><button :aria-label="'Manage events for '+c.name" :title="'Manage events for '+c.name" class="rounded-lg border border-[var(--border)] p-2 text-blue-600" @click="openEvents(c)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h1M3 12h1M3 18h1"/></svg></button><button v-if="canEdit(c)"  :aria-label="'Edit '+c.name" :title="'Edit '+c.name" class="rounded-lg border border-[var(--border)] p-2 text-blue-600" @click="edit(c)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg></button><span v-else class="text-xs text-[var(--muted)]">View only</span></div></td></tr></tbody>
   </table><p v-if="!visible.length" class="py-8 text-center text-sm text-[var(--muted)]">No matching competitions.</p></div>
  </UiPanel>
  <div v-if="dialog" class="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" @click.self="close"><section role="dialog" aria-modal="true" aria-label="Competition details" class="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl">
@@ -100,5 +147,30 @@ watch(schoolId,()=>{confirmSave.value=false;dialog.value=false;void load()},{imm
    <div class="mt-6 flex justify-end gap-3"><button type="button" :disabled="busy" aria-label="Cancel" title="Cancel" class="rounded-xl border border-[var(--border)] p-3 text-[#991B1B]" @click="confirmSave=false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg></button><button type="button" :disabled="busy" aria-label="Confirm save" title="Confirm save" class="rounded-xl bg-blue-600 p-3 text-white disabled:opacity-50" @click="save"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button></div>
   </section>
  </div>
+ <div v-if="eventCompetition" class="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" @click.self="eventCompetition=null">
+  <section role="dialog" aria-modal="true" aria-label="Competition events" class="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl">
+   <header class="mb-5 flex items-center justify-between gap-3"><div><h2 class="text-xl font-bold">Competition events</h2><p class="text-sm text-[var(--muted)]">{{eventCompetition.name}}</p></div><div class="flex gap-2">
+    <button v-if="canEdit(eventCompetition)" aria-label="Add event" title="Add event" class="rounded-xl bg-blue-600 p-3 text-white" @click="newEvent"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button aria-label="Close" title="Close" class="rounded-xl border border-[var(--border)] p-3 text-red-700" @click="eventCompetition=null"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+   </div></header>
+   <p v-if="eventLoading">Loading events…</p>
+   <div v-else class="overflow-x-auto"><table class="w-full min-w-[540px] text-left text-sm"><thead><tr class="border-b border-[var(--border)] text-[var(--muted)]"><th class="py-3">Event</th><th class="p-3">Age group</th><th class="p-3">Division</th><th class="p-3">Type</th><th class="p-3">Actions</th></tr></thead><tbody><tr v-for="e in events" :key="e.id" class="border-b border-[var(--border)]"><td class="py-3 font-semibold">{{eventName(e.event_definition_id)}}</td><td class="p-3">{{e.age_group||'All ages'}}</td><td class="p-3">{{e.division||'Open'}}</td><td class="p-3">{{e.is_team?'Team':'Individual'}}</td><td class="p-3"><div v-if="canEdit(eventCompetition)" class="flex gap-2"><button :aria-label="'Edit '+eventName(e.event_definition_id)" title="Edit event" class="rounded-lg border border-[var(--border)] p-2 text-blue-600" @click="editEvent(e)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16 4l4 4L9 19l-5 1 1-5Z"/></svg></button><button :aria-label="'Delete '+eventName(e.event_definition_id)" title="Delete event" class="rounded-lg border border-[var(--border)] p-2 text-red-700" @click="eventSelected=e;eventDelete=true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg></button></div></td></tr></tbody></table><p v-if="!events.length" class="py-8 text-center text-sm text-[var(--muted)]">No events configured. Use the plus icon to add one.</p></div>
+  </section>
+ </div>
+ <div v-if="eventDialog" class="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+  <section role="dialog" aria-modal="true" aria-label="Event details" class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl">
+   <h3 class="mb-4 text-lg font-bold">{{eventSelected?'Edit event':'Add event'}}</h3>
+   <form class="space-y-4" @submit.prevent="requestEventSave">
+    <label class="block text-sm font-semibold">Event definition<select v-model="eventForm.event_definition_id" required class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option disabled value="">Select event</option><option v-for="d in availableDefinitions" :key="d.id" :value="d.id">{{d.name}} ({{d.measurement}})</option></select></label>
+    <div class="grid grid-cols-2 gap-3"><label class="block text-sm font-semibold">Age group<input v-model="eventForm.age_group" maxlength="80" placeholder="e.g. Under 14" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label><label class="block text-sm font-semibold">Division<input v-model="eventForm.division" maxlength="80" placeholder="e.g. Girls" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label></div>
+    <div class="grid grid-cols-2 gap-3"><label class="block text-sm font-semibold">Minimum age<input v-model="eventForm.min_age" type="number" min="3" max="30" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label><label class="block text-sm font-semibold">Maximum age<input v-model="eventForm.max_age" type="number" min="3" max="30" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label></div>
+    <label class="block text-sm font-semibold">Maximum participants<input v-model="eventForm.max_participants" type="number" min="1" max="10000" placeholder="Optional" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
+    <label class="flex items-center gap-3 text-sm font-semibold"><input v-model="eventForm.is_team" type="checkbox" class="h-4 w-4"/>Team event</label>
+    <div class="flex justify-end gap-3"><button type="button" aria-label="Cancel" title="Cancel" class="rounded-xl border border-[var(--border)] p-3 text-red-700" @click="eventDialog=false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button><button type="submit" :disabled="eventBusy||!availableDefinitions.length" aria-label="Save event" title="Save event" class="rounded-xl bg-blue-600 p-3 text-white disabled:opacity-50"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5V3h11l5 5v13ZM7 21v-8h10v8M7 3v5h8"/></svg></button></div>
+   </form>
+  </section>
+ </div>
+ <div v-if="eventConfirm||eventDelete" class="fixed inset-0 z-[60] grid place-items-center bg-black/75 p-4"><section role="alertdialog" aria-modal="true" class="w-full max-w-sm rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-2xl"><h3 class="text-lg font-bold">{{eventDelete?'Delete event?':'Save event?'}}</h3><p class="mt-3 text-sm">{{eventDelete?'Are you sure you want to remove this event?':'Are you sure you want to save this competition event?'}}</p><div class="mt-6 flex justify-end gap-3"><button :disabled="eventBusy" aria-label="Cancel" title="Cancel" class="rounded-xl border border-[var(--border)] p-3 text-red-700" @click="eventConfirm=false;eventDelete=false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button><button :disabled="eventBusy" :aria-label="eventDelete?'Confirm delete':'Confirm save'" :title="eventDelete?'Confirm delete':'Confirm save'" class="rounded-xl bg-blue-600 p-3 text-white disabled:opacity-50" @click="eventDelete?deleteEvent():saveEvent()"><svg v-if="eventDelete" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15"/></svg><svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5V3h11l5 5v13ZM7 21v-8h10v8M7 3v5h8"/></svg></button></div></section></div>
+
 </div>
 </template>
