@@ -50,7 +50,7 @@ const benefits=[{number:'01',title:'Plan with confidence',description:'Bring com
           <div class="absolute -left-[8px] -right-[8px] -top-[8px] bottom-[8px] rotate-1 rounded-[2.2rem] bg-[#d9e9fc]" aria-hidden="true"></div>
           <div class="relative overflow-hidden rounded-[2rem] border-[6px] border-white bg-white shadow-xl shadow-slate-900/15">
             <div class="relative h-[340px] w-full sm:h-[490px] lg:h-[530px]">
-              <img v-for="(photo,index) in heroImages" :key="photo.src" :src="photo.src" :alt="index===heroIndex?photo.alt:''" :aria-hidden="index!==heroIndex" :class="index===heroIndex?'opacity-100':'opacity-0'" class="absolute inset-0 h-full w-full object-cover transition-opacity duration-[1500ms] ease-in-out motion-reduce:transition-none" loading="eager" decoding="async" />
+              <img v-for="(photo,index) in heroImages" :key="photo.src" :src="photo.src" :alt="index===heroIndex?photo.alt:''" :aria-hidden="index!==heroIndex" :style="{opacity:index===heroIndex?1:0,zIndex:index===heroIndex?2:1,transition:'opacity 1500ms ease-in-out'}" class="absolute inset-0 h-full w-full object-cover" loading="eager" decoding="async" />
             </div>
             <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#102944]/95 via-[#102944]/55 to-transparent px-7 pb-[37px] pt-28 text-white sm:pb-[41px]">
               <p class="text-xs font-bold uppercase tracking-[.2em] text-blue-200">The moments that matter</p>
