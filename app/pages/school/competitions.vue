@@ -8,16 +8,16 @@ const {has}=useSchoolPermissions()
 const competitions=ref<Competition[]>([])
 const sports=ref<Sport[]>([])
 const loading=ref(false),busy=ref(false),error=ref(''),notice=ref('')
-const search=ref(''),statusFilter=ref('all'),dialog=ref(false),selected=ref<Competition|null>(null)
+const search=ref(''),statusFilter=ref('all'),dialog=ref(false),confirmSave=ref(false),selected=ref<Competition|null>(null)
 const statuses=['draft','registration','active','completed','archived']
 const form=reactive({name:'',sport_id:'',school_year:new Date().getFullYear(),starts_on:'',status:'draft'})
 const visible=computed(()=>competitions.value.filter(c=>(statusFilter.value==='all'||c.status===statusFilter.value)&&[c.name,c.school_year,sportName(c.sport_id)].join(' ').toLowerCase().includes(search.value.toLowerCase())))
 const canCreate=computed(()=>!!schoolId.value&&has('competitions.create'))
 const canEdit=(c:Competition)=>c.competition_type==='intra_school'&&c.organiser_school_id===schoolId.value&&has('competitions.manage')
 function sportName(id:string|null){return sports.value.find(s=>s.id===id)?.name||'Not specified'}
-function reset(){selected.value=null;Object.assign(form,{name:'',sport_id:sports.value[0]?.id||'',school_year:new Date().getFullYear(),starts_on:'',status:'draft'});dialog.value=true;error.value=''}
+function reset(){selected.value=null;Object.assign(form,{name:'',sport_id:sports.value[0]?.id||'',school_year:new Date().getFullYear(),starts_on:'',status:'draft'});dialog.value=true;confirmSave.value=false;error.value=''}
 function edit(c:Competition){selected.value=c;Object.assign(form,{name:c.name,sport_id:c.sport_id||'',school_year:c.school_year,starts_on:c.starts_on||'',status:c.status});dialog.value=true;error.value=''}
-function close(){if(!busy.value)dialog.value=false}
+function close(){if(!busy.value){confirmSave.value=false;dialog.value=false}}
 async function load(){
  if(!schoolId.value){competitions.value=[];return}
  loading.value=true;error.value=''
@@ -32,6 +32,7 @@ async function load(){
  }catch(e:any){error.value=e.message||'Unable to load competitions'}
  finally{loading.value=false}
 }
+function requestSave(){if(!busy.value)confirmSave.value=true}
 async function save(){
  if(busy.value||!schoolId.value)return
  if(selected.value?!canEdit(selected.value):!canCreate.value)return
@@ -50,13 +51,14 @@ async function save(){
    if(e)throw e
    if(!data)throw new Error('Competition could not be created')
   }
+  confirmSave.value=false
   dialog.value=false
   notice.value=selected.value?'Competition updated successfully':'Competition created as a draft'
   await load()
  }catch(e:any){error.value=e.message||'Unable to save competition'}
  finally{busy.value=false}
 }
-watch(schoolId,()=>{dialog.value=false;void load()},{immediate:true})
+watch(schoolId,()=>{confirmSave.value=false;dialog.value=false;void load()},{immediate:true})
 </script>
 <template>
 <div class="space-y-6">
@@ -79,7 +81,7 @@ watch(schoolId,()=>{dialog.value=false;void load()},{immediate:true})
  </UiPanel>
  <div v-if="dialog" class="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" @click.self="close"><section role="dialog" aria-modal="true" aria-label="Competition details" class="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl">
   <header class="mb-5 flex items-center justify-between"><h2 class="text-xl font-bold">{{selected?'Edit competition':'New competition'}}</h2><button aria-label="Close" class="text-red-700" @click="close">✕</button></header>
-  <form class="space-y-4" @submit.prevent="save">
+  <form class="space-y-4" @submit.prevent="requestSave">
    <label class="block text-sm font-semibold">Competition name<input v-model="form.name" required minlength="3" maxlength="180" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
    <label class="block text-sm font-semibold">Sport<select v-model="form.sport_id" required class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option disabled value="">Select a sport</option><option v-for="s in sports" :key="s.id" :value="s.id">{{s.name}}</option></select></label>
    <div class="grid gap-4 sm:grid-cols-2">
@@ -91,5 +93,12 @@ watch(schoolId,()=>{dialog.value=false;void load()},{immediate:true})
    <div class="flex justify-end gap-3"><button type="button" class="rounded-xl border border-[var(--border)] px-5 py-3" @click="close">Cancel</button><button type="submit" :disabled="busy||!sports.length" class="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white disabled:opacity-50">{{busy?'Saving…':'Save competition'}}</button></div>
   </form>
  </section></div>
+ <div v-if="confirmSave" class="fixed inset-0 z-[60] grid place-items-center bg-black/70 p-4">
+  <section role="alertdialog" aria-modal="true" aria-labelledby="competition-confirm-title" aria-describedby="competition-confirm-description" class="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-2xl">
+   <h3 id="competition-confirm-title" class="text-lg font-bold">{{selected?'Save competition changes?':'Create draft competition?'}}</h3>
+   <p id="competition-confirm-description" class="mt-3 text-sm">Are you sure you want to {{selected?'save changes to':'create'}} <strong>{{form.name.trim()}}</strong>{{selected?'':' as a draft competition'}}?</p>
+   <div class="mt-6 flex justify-end gap-3"><button type="button" :disabled="busy" class="rounded-xl border border-[var(--border)] px-5 py-3" @click="confirmSave=false">Cancel</button><button type="button" :disabled="busy" class="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white disabled:opacity-50" @click="save">{{busy?'Saving…':'Yes, save'}}</button></div>
+  </section>
+ </div>
 </div>
 </template>
