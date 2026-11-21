@@ -52,7 +52,7 @@ const benefits=[{number:'01',title:'Plan with confidence',description:'Bring com
             <div class="relative h-[340px] w-full sm:h-[490px] lg:h-[530px]">
               <img v-for="(photo,index) in heroImages" :key="photo.src" :src="photo.src" :alt="index===heroIndex?photo.alt:''" :aria-hidden="index!==heroIndex" :style="{opacity:index===heroIndex?1:0,zIndex:index===heroIndex?2:1,transition:'opacity 1500ms ease-in-out'}" class="absolute inset-0 h-full w-full object-cover" loading="eager" decoding="async" />
             </div>
-            <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#102944]/95 via-[#102944]/55 to-transparent px-7 pb-[37px] pt-28 text-white sm:pb-[41px]">
+            <div class="pointer-events-none absolute z-10 inset-x-0 bottom-0 bg-gradient-to-t from-[#102944]/95 via-[#102944]/55 to-transparent px-7 pb-[37px] pt-28 text-white sm:pb-[41px]">
               <p class="text-xs font-bold uppercase tracking-[.2em] text-blue-200">The moments that matter</p>
               <p class="mt-2 text-2xl font-extrabold sm:text-3xl">Let every achievement shine.</p>
             </div>
