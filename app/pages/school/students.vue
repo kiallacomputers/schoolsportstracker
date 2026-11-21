@@ -5,7 +5,8 @@ const {schoolId,schoolRole,platformAdmin}=useSchool()
 const data=useStudents()
 const search=ref(''),status=ref('active'),yearLevel=ref('all'),houseId=ref('all')
 const selected=ref<Student|null>(null),editorOpen=ref(false),notice=ref(''),formError=ref('')
-const canManage=computed(()=>platformAdmin.value||schoolRole.value==='school_admin')
+const {has}=useSchoolPermissions()
+const canManage=computed(()=>has('students.create')||has('students.edit'))
 const years=computed(()=>[...new Set(data.enrolments.value.map(e=>e.year_level).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})))
 const filtered=computed(()=>data.students.value.filter(s=>{
  const e=data.enrolmentMap.value.get(s.id),term=search.value.toLowerCase()
@@ -29,7 +30,7 @@ watch([schoolId,data.year],()=>{void data.load()},{immediate:true})
       <strong class="text-xl font-bold tabular-nums">{{metric.value}}</strong>
     </div>
   </div>
-  <button v-if="canManage" class="flex min-h-[54px] shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600" @click="open(null)"><span aria-hidden="true" class="text-xl leading-none">+</span> Add student</button>
+  <button v-if="has('students.create')" class="flex min-h-[54px] shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600" @click="open(null)"><span aria-hidden="true" class="text-xl leading-none">+</span> Add student</button>
 </div>
 <p v-if="data.error.value" role="alert" class="rounded-xl bg-red-50 p-4 text-red-700">{{data.error.value}}</p><p v-if="notice" role="status" class="text-sm text-green-700">{{notice}}</p>
 <UiPanel><div class="mb-5 flex flex-wrap items-center justify-between gap-3"><h2 class="text-lg font-bold">Student directory</h2><label class="text-sm text-[var(--muted)]">School year <input v-model.number="data.year.value" type="number" min="2000" max="2100" class="ml-2 w-24 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2"/></label></div>
