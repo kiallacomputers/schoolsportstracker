@@ -15,3 +15,17 @@ body { margin:0; }
 .sst .sidebar-menu:hover .sidebar-scroll-track,
 .sst .sidebar-menu:focus-within .sidebar-scroll-track { opacity:1; }
 .sst .sidebar-scroll-thumb { background:var(--scroll-thumb); border-radius:999px; }
+
+/* Make the entire surface of every native dropdown an obvious click target. */
+.sst select:not([multiple]) {
+  cursor:pointer;
+  appearance:none;
+  -webkit-appearance:none;
+  padding-right:2.75rem;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2361738a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 0.9rem center;
+  background-size:16px 16px;
+}
+.sst select:not([multiple]):disabled { cursor:not-allowed; }
+.sst select:not([multiple]):focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
