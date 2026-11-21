@@ -1,6 +1,18 @@
 <script setup lang="ts">
 useSeoMeta({title:'School Sports Tracker | Every achievement starts here',description:'A welcoming home for school athletics, swimming, competition management, results and sporting achievements.'})
 const menuOpen=ref(false)
+const heroImages=[
+{src:'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=1400&q=85',alt:'Track athletics at a stadium'},
+{src:'https://images.unsplash.com/photo-1530549387789-4c1017266635?auto=format&fit=crop&w=1400&q=85',alt:'Swimming pool lanes'},
+{src:'https://unsplash.com/photos/vWBJFk9iIro/download?force=true&w=1400',alt:'Long jump field event at an athletics stadium'}
+]
+const heroIndex=ref(0)
+let heroTimer:ReturnType<typeof setInterval>|undefined
+let motionPreference:MediaQueryList|undefined
+function stopHero(){if(heroTimer){clearInterval(heroTimer);heroTimer=undefined}}
+function syncHeroMotion(){stopHero();if(!motionPreference?.matches)heroTimer=setInterval(()=>{heroIndex.value=(heroIndex.value+1)%heroImages.length},5000)}
+onMounted(()=>{motionPreference=window.matchMedia('(prefers-reduced-motion: reduce)');motionPreference.addEventListener('change',syncHeroMotion);syncHeroMotion()})
+onBeforeUnmount(()=>{stopHero();motionPreference?.removeEventListener('change',syncHeroMotion)})
 const sports=[
 {title:'Athletics',description:'From track to field, make every school athletics event count.',image:'https://images.unsplash.com/photo-1552674605-db6ffd4facb5?auto=format&fit=crop&w=1000&q=85',alt:'Runners on an athletics track'},
 {title:'Swimming',description:'Bring clarity and excitement to swimming carnivals and race-day results.',image:'https://images.unsplash.com/photo-1530549387789-4c1017266635?auto=format&fit=crop&w=1000&q=85',alt:'Swimming pool lanes'},
@@ -25,9 +37,9 @@ const benefits=[{number:'01',title:'Plan with confidence',description:'Bring com
     <nav v-if="menuOpen" class="flex flex-col gap-2 border-t border-[#e4eaf2] bg-white px-5 py-5 md:hidden" aria-label="Mobile navigation"><a href="#discover" class="rounded-lg px-3 py-3 font-semibold" @click="menuOpen=false">Discover</a><a href="#features" class="rounded-lg px-3 py-3 font-semibold" @click="menuOpen=false">Features</a><a href="#plans" class="rounded-lg px-3 py-3 font-semibold" @click="menuOpen=false">Plans & Pricing</a><NuxtLink to="/login" class="rounded-lg border border-[#dbe4ee] px-3 py-3 font-semibold">Login</NuxtLink><NuxtLink to="/request-school" class="rounded-lg bg-blue-600 px-3 py-3 text-center font-semibold text-white">Register Your School</NuxtLink></nav>
   </header>
   <main>
-    <section class="relative isolate overflow-hidden bg-[#f5f9ff]">
-      <div class="pointer-events-none absolute -right-32 -top-40 h-[560px] w-[560px] rounded-full bg-[#e0efff] blur-3xl" aria-hidden="true"></div>
-      <div class="pointer-events-none absolute -bottom-48 left-[-180px] h-[400px] w-[400px] rounded-full bg-[#eaf2ff] blur-3xl" aria-hidden="true"></div>
+    <section class="relative isolate overflow-hidden bg-white">
+      <div class="pointer-events-none absolute -right-32 -top-40 h-[560px] w-[560px] rounded-full bg-[#f7f9fc] blur-3xl" aria-hidden="true"></div>
+      <div class="pointer-events-none absolute -bottom-48 left-[-180px] h-[400px] w-[400px] rounded-full bg-[#fafbfe] blur-3xl" aria-hidden="true"></div>
       <div class="relative mx-auto grid max-w-7xl items-center gap-12 px-5 py-16 sm:px-8 lg:grid-cols-[.95fr_1.05fr] lg:gap-16 lg:py-24">
         <div>
           <span class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-4 py-2 text-xs font-extrabold uppercase tracking-[.16em] text-blue-700 shadow-sm"><span class="h-2 w-2 rounded-full bg-blue-600"></span>Welcome to School Sports Tracker</span>
@@ -37,10 +49,11 @@ const benefits=[{number:'01',title:'Plan with confidence',description:'Bring com
           <p class="mt-6 flex items-center gap-2 text-sm font-medium text-[#61738a]"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>Compete · Achieve · Inspire</p>
         </div>
         <div class="relative mx-auto w-full max-w-[640px]">
-          <div class="absolute -top-[8px] -left-[8px] -right-[8px] bottom-0 rotate-1 rounded-[2.2rem] bg-[#d9e9fc]" aria-hidden="true"></div>
-          <div class="relative overflow-hidden rounded-[2rem] border-[6px] border-white bg-[#dbeafe] shadow-2xl shadow-[#adc5df]/60">
-            <img src="https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=1400&q=90" alt="Athletics competitors taking part in a sporting event" class="h-[340px] w-full object-cover sm:h-[490px] lg:h-[530px]" />
-            <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#102944]/95 via-[#102944]/55 to-transparent px-7 pb-[37px] pt-28 text-white sm:pb-[41px]">
+          <div class="relative overflow-hidden rounded-[2rem] border-[6px] border-white bg-white shadow-2xl shadow-[#adc5df]/60">
+            <div class="relative h-[340px] w-full sm:h-[490px] lg:h-[530px]">
+              <img v-for="(photo,index) in heroImages" :key="photo.src" :src="photo.src" :alt="photo.alt" :aria-hidden="index!==heroIndex" :class="index===heroIndex?'opacity-100':'opacity-0'" class="absolute inset-0 h-full w-full object-cover transition-opacity duration-[1500ms] ease-in-out motion-reduce:transition-none" :loading="index===0?'eager':'lazy'" />
+            </div>
+            <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#102944]/95 via-[#102944]/55 to-transparent px-7 pb-[37px] pt-28 text-white sm:pb-[41px]">
               <p class="text-xs font-bold uppercase tracking-[.2em] text-blue-200">The moments that matter</p>
               <p class="mt-2 text-2xl font-extrabold sm:text-3xl">Let every achievement shine.</p>
             </div>
