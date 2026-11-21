@@ -13,6 +13,11 @@ export default defineEventHandler(async event=>{
  const headers={apikey:key,Authorization:`Bearer ${token}`,'Content-Type':'application/json'}
  const auth=await fetch(`${url}/auth/v1/user`,{headers})
  if(!auth.ok)throw createError({statusCode:401,statusMessage:'Session expired'})
+ const domain=email.split('@')[1]
+ const domainsResponse=await fetch(`${url}/rest/v1/school_email_domains?school_id=eq.${encodeURIComponent(school_id)}&select=domain`,{headers})
+ if(!domainsResponse.ok)throw createError({statusCode:403,statusMessage:'Unable to verify approved school email domains'})
+ const domains=await domainsResponse.json() as {domain:string}[]
+ if(!domains.some(row=>String(row.domain).trim().toLowerCase()===domain))throw createError({statusCode:403,statusMessage:'Email domain is not approved for this school'})
  const origin=(process.env.APP_PUBLIC_URL||process.env.URL||'').replace(/\/$/,'')
  if(!/^https:\/\/[^/]+$/i.test(origin))throw createError({statusCode:503,statusMessage:'APP_PUBLIC_URL must be set to the HTTPS site origin'})
  const issued=await fetch(`${url}/rest/v1/rpc/issue_school_staff_invitation`,{method:'POST',headers,body:JSON.stringify({p_school_id:school_id,p_email:email})})
