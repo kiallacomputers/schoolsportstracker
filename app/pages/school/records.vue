@@ -15,7 +15,9 @@ const selectedRecordContext=computed(()=>[definition.value?.name,ageGroup.value|
 const orderedRecords=computed(()=>[...records.value].sort((a,b)=>String(a.event_definition_id).localeCompare(String(b.event_definition_id))||String(a.age_group).localeCompare(String(b.age_group))||String(a.division).localeCompare(String(b.division))))
 const current=computed(()=>records.value.find(r=>r.event_definition_id===selectedDefinition.value&&r.age_group===ageGroup.value&&r.division===division.value&&r.record_scope===recordScope.value))
 const timeBased=computed(()=>definition.value?.measurement?.startsWith('time'))
-const format=(v:number)=>definition.value?.measurement==='distance_mm'?(v/1000).toFixed(3)+' m':definition.value?.measurement==='time_ms'?(v/1000).toFixed(3)+' s':String(v)
+const formatTime=(ms:number)=>{const h=Math.round(ms/10);return Math.floor(h/6000)+':'+String(Math.floor(h%6000/100)).padStart(2,'0')+':'+String(h%100).padStart(2,'0')}
+const parseTime=(raw:string)=>{const m=/^(\d+):([0-5]\d):([0-9]{2})$/.exec(raw.trim());if(!m)return null;const ms=(Number(m[1])*60+Number(m[2]))*1000+Number(m[3])*10;return Number.isSafeInteger(ms)&&ms>0?ms:null}
+const format=(v:number)=>definition.value?.measurement==='distance_mm'?(v/1000).toFixed(3)+' m':definition.value?.measurement==='time_ms'?formatTime(v):String(v)
 const matching=computed(()=>candidates.value.filter(r=>r.competition_type===(recordScope.value==='ISR'?'inter_school':'intra_school')&&r.event_definition_id===selectedDefinition.value&&r.age_group===ageGroup.value&&r.division===division.value&&r.status==='valid'&&r.published_at&&r.performance_value>0))
 const improved=computed(()=>current.value?matching.value.filter(r=>timeBased.value?r.performance_value<current.value.performance_value:r.performance_value>current.value.performance_value).sort((a,b)=>timeBased.value?a.performance_value-b.performance_value:b.performance_value-a.performance_value):[])
 function downloadRecordCsvTemplate(){
@@ -27,7 +29,7 @@ function downloadRecordCsvTemplate(){
  document.body.appendChild(link);link.click();link.remove()
  URL.revokeObjectURL(url)
 }
-function resetForm(){holder.value=current.value?.holder_name||'';value.value=String(current.value?.performance_value||'');achieved.value=current.value?.achieved_on||''}
+function resetForm(){holder.value=current.value?.holder_name||'';value.value=current.value?(timeBased.value?formatTime(Number(current.value.performance_value)):String(current.value.performance_value)):'';achieved.value=current.value?.achieved_on||''}
 async function load(){
  if(!schoolId.value)return
  busy.value=true;error.value=''
@@ -51,8 +53,8 @@ async function save(){
  busy.value=true;error.value='';notice.value=''
  try{
   if(!ageGroup.value||!division.value||!schoolEvents.value.some(e=>e.event_definition_id===selectedDefinition.value&&e.age_group===ageGroup.value&&e.division===division.value))throw new Error('Select a configured event, age group and division before saving the record')
-  const n=Number(value.value)
-  if(!holder.value.trim()||!Number.isSafeInteger(n)||n<=0)throw new Error('Enter a holder and a positive whole-number performance')
+  const n=timeBased.value?parseTime(value.value):Number(value.value)
+  if(!holder.value.trim()||n===null||!Number.isSafeInteger(n)||n<=0)throw new Error(timeBased.value?'Enter a record holder and a time in M:SS:HH format (e.g. 0:14:80)':'Enter a holder and a positive whole-number performance')
   const {error:e}=await db.from('school_records').upsert({school_id:schoolId.value,event_definition_id:selectedDefinition.value,age_group:ageGroup.value,division:division.value,record_scope:recordScope.value,holder_name:holder.value.trim(),performance_value:n,achieved_on:achieved.value||null},{onConflict:'school_id,event_definition_id,age_group,division,record_scope'})
   if(e)throw e
   confirm.value=false;await load();notice.value='School record saved'
@@ -97,9 +99,9 @@ watch([selectedDefinition,ageGroup,division,recordScope],resetForm)
   <div class="overflow-x-auto"><table class="w-full min-w-[570px] text-left text-sm"><thead class="bg-[var(--panel)]"><tr><th class="p-2">Event</th><th class="p-2">Age group</th><th class="p-2">Division</th><th class="p-2">Type</th><th class="p-2">Holder</th><th class="p-2">Performance</th><th class="p-2 text-right">Action</th></tr></thead><tbody><tr v-for="r in orderedRecords" :key="r.id" class="border-t border-[var(--border)]"><td class="p-2">{{definitions.find(d=>d.id===r.event_definition_id)?.name||'Unknown'}}</td><td class="p-2">{{r.age_group||'All ages'}}</td><td class="p-2">{{r.division||'All divisions'}}</td><td class="p-2">{{r.record_scope}}</td><td class="p-2">{{r.holder_name}}</td><td class="p-2">{{r.performance_value}}</td><td class="p-2 text-right"><button type="button" class="rounded-lg border border-[var(--border)] px-2 py-1 text-blue-600" title="View record" @click="selectedDefinition=r.event_definition_id;ageGroup=r.age_group;division=r.division;recordScope=r.record_scope;resetForm()">View</button></td></tr></tbody></table><p v-if="!orderedRecords.length" class="p-3 text-sm text-[var(--muted)]">No record baselines have been entered.</p></div>
  </UiPanel>
  <div v-if="confirm" class="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" @click.self="confirm=false"><section role="dialog" aria-modal="true" aria-label="Confirm school record" class="w-full max-w-lg space-y-4 rounded-xl bg-[var(--surface)] p-6 text-[var(--ink)]">
-  <h2 class="text-xl font-bold">Confirm school record</h2><div class="rounded-lg border border-blue-300 bg-blue-50 p-3 text-sm text-blue-950"><p class="font-bold">Record applies to:</p><p>{{selectedRecordContext}}</p><p class="mt-1 text-xs">Only results matching this event, age group and division will be compared against this record.</p></div><p class="text-sm text-[var(--muted)]">Verify the official result before saving. Measurements are stored as {{definition?.measurement}}. This does not change scoring.</p>
+  <h2 class="text-xl font-bold">Confirm school record</h2><div class="rounded-lg border border-blue-300 bg-blue-50 p-3 text-sm text-blue-950"><p class="font-bold">Record applies to:</p><p>{{selectedRecordContext}}</p><p class="mt-1 text-xs">Only results matching this event, age group and division will be compared against this record.</p></div><p class="text-sm text-[var(--muted)]">Verify the official result before saving. {{timeBased?'Enter a time in M:SS:HH format. It is saved internally as milliseconds.':'Measurements are stored as '+definition?.measurement+'.'}} This does not change scoring.</p>
   <label class="block text-sm font-semibold">Record holder<input v-model="holder" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
-  <label class="block text-sm font-semibold">Performance ({{definition?.measurement}})<input v-model="value" type="number" min="1" step="1" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
+  <label class="block text-sm font-semibold">{{timeBased?'Record time (M:SS:HH)':'Performance ('+definition?.measurement+')'}}<input v-model="value" :type="timeBased?'text':'number'" :placeholder="timeBased?'0:14:80':''" :min="timeBased?undefined:1" :step="timeBased?undefined:1" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
   <label class="block text-sm font-semibold">Date achieved<input v-model="achieved" type="date" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
   <div class="flex justify-end gap-3"><button type="button" class="rounded-lg border border-[var(--border)] px-4 py-2" @click="confirm=false">Cancel</button><button type="button" :disabled="busy" class="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50" @click="save">Confirm & save</button></div>
  </section></div>
