@@ -237,7 +237,9 @@ async function loadResults(){
  try{results.value=await query('event_results','id,entry_id,placing_position,performance_value,status,points,published_at','round_id',roundId.value)}
  catch(e:any){error.value=e.message||'Unable to load results'}
 }
+const unrecordedEntries=computed(()=>entries.value.filter(e=>!results.value.some(r=>r.entry_id===e.id)))
 function editEntry(entry:any){
+ if(!entry)return
  const result=results.value.find(r=>r.entry_id===entry.id)
  Object.assign(form,{entry_id:entry.id,placing_position:result?.placing_position==null?'':String(result.placing_position),performance_value:result?.performance_value==null?'':String(result.performance_value),status:result?.status||'valid',published:!!result?.published_at})
  notice.value='';error.value=''
@@ -296,7 +298,7 @@ watch(schoolId,loadCompetitions,{immediate:true})
    <h2 class="mb-4 text-xl font-bold">Record a result</h2>
    <p v-if="!entries.length" class="text-[var(--muted)]">No participants are registered for this event yet.</p>
    <form v-else class="space-y-4" @submit.prevent="askSave">
-    <label class="block font-semibold">Participant / team<select v-model="form.entry_id" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" required @change="editEntry(entries.find(e=>e.id===form.entry_id))"><option value="">Select participant</option><option v-for="e in entries" :key="e.id" :value="e.id">{{entryName(e)}} — {{houseName(e.house_id)}}</option></select></label>
+    <label class="block font-semibold">Participant / team<select v-model="form.entry_id" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" required @change="editEntry(entries.find(e=>e.id===form.entry_id))"><option value="">Select participant</option><option v-for="e in unrecordedEntries" :key="e.id" :value="e.id">{{entryName(e)}} — {{houseName(e.house_id)}}</option><option v-if="form.entry_id && !unrecordedEntries.some(e=>e.id===form.entry_id)" :value="form.entry_id">{{entryName(entries.find(e=>e.id===form.entry_id))}} — editing saved result</option></select></label>
     <label class="block font-semibold">Placing<input v-model="form.placing_position" type="number" min="1" step="1" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
     <label class="block font-semibold">Performance (stored measurement value)<input v-model="form.performance_value" type="number" min="0" step="1" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
     <label class="block font-semibold">Status<select v-model="form.status" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option value="valid">Valid</option><option value="dns">Did not start</option><option value="dnf">Did not finish</option><option value="dq">Disqualified</option></select></label>
