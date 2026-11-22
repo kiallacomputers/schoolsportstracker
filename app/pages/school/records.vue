@@ -65,7 +65,8 @@ watch([selectedDefinition,ageGroup,division,recordScope],resetForm)
 </script>
 <template>
 <div class="space-y-6">
- <UiPageHeader title="School Records" description="Maintain historical baselines; publishing results automatically updates verified records."/>\n <div class="flex flex-wrap items-center gap-3"><button type="button" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white" @click="downloadRecordCsvTemplate">Download blank CSV template</button><span class="text-sm text-[var(--muted)]">Use SR or ISR for record_type. Enter race times as M:SS:HH, dates as YYYY-MM-DD, and one record per row.</span></div>
+ <UiPageHeader title="School Records" description="Maintain historical baselines; publishing results automatically updates verified records."/>
+ <div class="flex flex-col items-start gap-2"><button type="button" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white" @click="downloadRecordCsvTemplate">Download CSV template</button><span class="max-w-3xl break-words text-sm text-[var(--muted)]">Use SR or ISR for record_type. Enter race times as M:SS:HH, dates as YYYY-MM-DD, and one record per row.</span></div>
  <p v-if="error" role="alert" class="rounded-lg bg-red-50 p-3 text-red-700">{{error}}</p>
  <p v-if="notice" role="status" class="text-green-600">{{notice}}</p>
  <UiPanel>
