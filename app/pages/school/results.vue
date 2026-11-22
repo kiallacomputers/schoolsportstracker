@@ -12,6 +12,26 @@ const eventName=(e:any)=>[e.event_definitions?.name,e.age_group,e.division].filt
 const houseName=(id:string)=>houses.value.find(h=>h.id===id)?.name||'Unassigned'
 const memberNames=(entryId:string)=>participants.value.filter(p=>p.entry_id===entryId).sort((a,b)=>(a.leg_order||0)-(b.leg_order||0)).map(p=>{const s=students.value.find(s=>s.id===p.student_id);return s?[s.given_name,s.family_name].filter(Boolean).join(' '):'Unknown student'})
 const entryName=(entryId:string)=>{const e=entries.value.find(e=>e.id===entryId);return e?.team_name||memberNames(entryId).join(', ')||'Unknown participant'}
+const recordBaselines=ref<any[]>([]),recordError=ref('')
+async function loadRecordBaselines(){
+ recordBaselines.value=[];recordError.value=''
+ const ev=selectedEvent.value
+ if(!schoolId.value||!ev)return
+ const {data,error:e}=await db.from('school_records').select('record_scope,performance_value,source_result_id').eq('school_id',schoolId.value).eq('event_definition_id',ev.event_definition_id).eq('age_group',ev.age_group).eq('division',ev.division).in('record_scope',['SR','ISR'])
+ if(e){recordError.value='Unable to check record benchmarks: '+e.message;return}
+ recordBaselines.value=data||[]
+}
+function resultRecordStatus(r:any,scope:string){
+ if(r.status!=='valid'||r.performance_value==null)return ''
+ const b=recordBaselines.value.find(x=>x.record_scope===scope)
+ if(!b||b.performance_value==null)return ''
+ if(b.source_result_id===r.id)return scope==='SR'?'Confirmed SR':'Recorded ISR'
+ const time=/^(time|duration)/i.test(String(selectedEvent.value?.event_definitions?.measurement||''))
+ const n=Number(r.performance_value),v=Number(b.performance_value)
+ if(time?n<v:n>v)return scope==='ISR'?'ISR-standard (verify)':'Exceeds SR benchmark (verify)'
+ if(n===v)return 'Equals '+scope+' benchmark'
+ return ''
+}
 const publishedResults=computed(()=>results.value.filter(r=>r.published_at).sort((a,b)=>(a.placing_position??9999)-(b.placing_position??9999)||entryName(a.entry_id).localeCompare(entryName(b.entry_id))))
 const orderedTotals=computed(()=>[...totals.value].sort((a,b)=>Number(b.total_points)-Number(a.total_points)||houseName(a.house_id).localeCompare(houseName(b.house_id))))
 const publishedCount=computed(()=>publishedResults.value.length)
@@ -33,7 +53,7 @@ async function loadEvents(){
  if(!competitionId.value)return
  busy.value=true;error.value=''
  try{
-  const [ev,t]=await Promise.all([get('competition_events','id,competition_id,age_group,division,event_definitions(name,measurement)','competition_id',competitionId.value),get('competition_house_totals','competition_id,school_id,house_id,total_points,scored_results','competition_id',competitionId.value)])
+  const [ev,t]=await Promise.all([get('competition_events','id,competition_id,event_definition_id,age_group,division,event_definitions(name,measurement)','competition_id',competitionId.value),get('competition_house_totals','competition_id,school_id,house_id,total_points,scored_results','competition_id',competitionId.value)])
   events.value=ev.sort((a,b)=>eventName(a).localeCompare(eventName(b)));totals.value=t.filter(x=>x.school_id===schoolId.value)
   eventId.value=events.value[0]?.id||''
   if(eventId.value)await loadRounds()
@@ -55,7 +75,7 @@ async function loadRounds(){
    const studentIds=[...new Set(participants.value.map(x=>x.student_id))]
    if(studentIds.length){const {data:st,error:se}=await db.from('students').select('id,given_name,family_name').in('id',studentIds);if(se)throw se;students.value=st||[]}
   }
-  if(roundId.value)await loadResults()
+  await loadRecordBaselines();if(roundId.value)await loadResults()
  }catch(e:any){error.value=e.message||'Unable to load rounds'}finally{busy.value=false}
 }
 async function loadResults(){
@@ -82,10 +102,10 @@ watch(schoolId,loadCompetitions,{immediate:true})
   <UiPanel>
    <h2 class="mb-3 text-xl font-bold">Published results</h2>
    <p class="mb-3 text-sm text-[var(--muted)]">{{selectedEvent?eventName(selectedEvent):'Select an event'}}{{selectedRound?' · '+selectedRound.name:''}} · {{publishedCount}} published</p>
-   <p v-if="busy" class="text-sm text-[var(--muted)]">Loading results…</p>
+   <p v-if="recordError" role="alert" class="mb-2 text-xs text-red-600">{{recordError}}</p><p class="mb-2 text-xs text-[var(--muted)]">SR and ISR comparisons use the saved event, age group and division benchmarks. ISR-standard performances outside interschool events require official verification.</p><p v-if="busy" class="text-sm text-[var(--muted)]">Loading results…</p>
    <p v-else-if="!publishedResults.length" class="text-sm text-[var(--muted)]">No published results for this round. Publish results from Event Day to display them here.</p>
    <div v-for="r in publishedResults" :key="r.id" class="flex items-center justify-between gap-3 border-b border-[var(--border)] py-3">
-    <div><strong>{{r.placing_position?'#'+r.placing_position:'—'}} · {{entryName(r.entry_id)}} <span v-if="r.record_badge" class="ml-2 inline-flex rounded-md border px-2 py-0.5 text-xs font-extrabold tracking-wide" :class="r.record_badge==='SR'?'border-[#8C6500] bg-[#C99700] text-[#1F1700] shadow-sm':'border-violet-400 bg-violet-100 text-violet-900'" :title="r.record_badge==='SR'?'School Record':'Inter-School Record'">{{r.record_badge}}</span></strong><p class="text-xs text-[var(--muted)]">House: {{houseName(entries.find(e=>e.id===r.entry_id)?.house_id)}} · {{performance(r)}}</p></div>
+    <div><strong>{{r.placing_position?'#'+r.placing_position:'—'}} · {{entryName(r.entry_id)}} <span v-if="r.record_badge" class="ml-2 inline-flex rounded-md border px-2 py-0.5 text-xs font-extrabold tracking-wide" :class="r.record_badge==='SR'?'border-[#8C6500] bg-[#C99700] text-[#1F1700] shadow-sm':'border-violet-400 bg-violet-100 text-violet-900'" :title="r.record_badge==='SR'?'School Record':'Inter-School Record'">{{r.record_badge}}</span></strong><p class="text-xs text-[var(--muted)]">House: {{houseName(entries.find(e=>e.id===r.entry_id)?.house_id)}} · {{performance(r)}}</p><div class="mt-1 flex flex-wrap gap-1"><template v-for="scope in ['SR','ISR']" :key="scope"><span v-if="resultRecordStatus(r,scope)" class="rounded px-2 py-0.5 text-xs font-semibold" :class="scope==='SR'?'bg-amber-100 text-amber-900':'bg-violet-100 text-violet-900'">{{resultRecordStatus(r,scope)}}</span></template></div></div>
     <strong class="whitespace-nowrap">{{Number(r.points||0)}} pts</strong>
    </div>
   </UiPanel>
