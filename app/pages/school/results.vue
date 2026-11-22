@@ -62,7 +62,7 @@ async function loadResults(){
  results.value=[]
  if(!roundId.value)return
  busy.value=true;error.value=''
- try{results.value=await get('event_results','id,round_id,entry_id,status,performance_value,placing_position,points,published_at','round_id',roundId.value)}
+ try{results.value=await get('event_results','id,round_id,entry_id,status,performance_value,placing_position,points,published_at,record_badge','round_id',roundId.value)}
  catch(e:any){error.value=e.message||'Unable to load results'}finally{busy.value=false}
 }
 watch(schoolId,loadCompetitions,{immediate:true})
@@ -85,7 +85,7 @@ watch(schoolId,loadCompetitions,{immediate:true})
    <p v-if="busy" class="text-sm text-[var(--muted)]">Loading results…</p>
    <p v-else-if="!publishedResults.length" class="text-sm text-[var(--muted)]">No published results for this round. Publish results from Event Day to display them here.</p>
    <div v-for="r in publishedResults" :key="r.id" class="flex items-center justify-between gap-3 border-b border-[var(--border)] py-3">
-    <div><strong>{{r.placing_position?'#'+r.placing_position:'—'}} · {{entryName(r.entry_id)}}</strong><p class="text-xs text-[var(--muted)]">House: {{houseName(entries.find(e=>e.id===r.entry_id)?.house_id)}} · {{performance(r)}}</p></div>
+    <div><strong>{{r.placing_position?'#'+r.placing_position:'—'}} · {{entryName(r.entry_id)}} <span v-if="r.record_badge" class="ml-2 rounded bg-amber-100 px-2 py-1 text-xs font-bold text-amber-900" :title="r.record_badge==='SR'?'School Record':'Inter-School Record'">{{r.record_badge}}</span></strong><p class="text-xs text-[var(--muted)]">House: {{houseName(entries.find(e=>e.id===r.entry_id)?.house_id)}} · {{performance(r)}}</p></div>
     <strong class="whitespace-nowrap">{{Number(r.points||0)}} pts</strong>
    </div>
   </UiPanel>
