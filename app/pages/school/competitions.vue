@@ -1,6 +1,6 @@
 <script setup lang="ts">
 definePageMeta({layout:'workspace'})
-type Competition={id:string;name:string;sport_id:string|null;competition_type:string;management_mode:string;organiser_school_id:string|null;school_year:number;starts_on:string|null;status:string}
+type Competition={id:string;name:string;sport_id:string|null;competition_type:string;management_mode:string;heat_entry_mode:string;organiser_school_id:string|null;school_year:number;starts_on:string|null;status:string}
 type Sport={id:string;name:string}
 const db=useSupabaseClient()
 const {schoolId,platformAdmin}=useSchool()
@@ -204,20 +204,20 @@ async function saveScoring(){
 }
 const pointsPreview=computed(()=>{try{return parsePoints(scoringForm.points)}catch{return []}})
 const statuses=['draft','registration','active','completed','archived']
-const form=reactive({name:'',sport_id:'',school_year:new Date().getFullYear(),starts_on:'',status:'draft'})
+const form=reactive({name:'',sport_id:'',school_year:new Date().getFullYear(),starts_on:'',status:'draft',heat_entry_mode:'sequential'})
 const visible=computed(()=>competitions.value.filter(c=>(statusFilter.value==='all'||c.status===statusFilter.value)&&[c.name,c.school_year,sportName(c.sport_id)].join(' ').toLowerCase().includes(search.value.toLowerCase())))
 const canCreate=computed(()=>!!schoolId.value&&has('competitions.create'))
 const canEdit=(c:Competition)=>c.competition_type==='intra_school'&&c.organiser_school_id===schoolId.value&&has('competitions.manage')
 function sportName(id:string|null){return sports.value.find(s=>s.id===id)?.name||'Not specified'}
-function reset(){selected.value=null;Object.assign(form,{name:'',sport_id:sports.value[0]?.id||'',school_year:new Date().getFullYear(),starts_on:'',status:'draft'});dialog.value=true;confirmSave.value=false;error.value=''}
-function edit(c:Competition){selected.value=c;Object.assign(form,{name:c.name,sport_id:c.sport_id||'',school_year:c.school_year,starts_on:c.starts_on||'',status:c.status});dialog.value=true;error.value=''}
+function reset(){selected.value=null;Object.assign(form,{name:'',sport_id:sports.value[0]?.id||'',school_year:new Date().getFullYear(),starts_on:'',status:'draft',heat_entry_mode:'sequential'});dialog.value=true;confirmSave.value=false;error.value=''}
+function edit(c:Competition){selected.value=c;Object.assign(form,{name:c.name,sport_id:c.sport_id||'',school_year:c.school_year,starts_on:c.starts_on||'',status:c.status,heat_entry_mode:c.heat_entry_mode||'sequential'});dialog.value=true;error.value=''}
 function close(){if(!busy.value){confirmSave.value=false;dialog.value=false}}
 async function load(){
  if(!schoolId.value){competitions.value=[];return}
  loading.value=true;error.value=''
  try{
   const [c,s]=await Promise.all([
-   db.from('competitions').select('id,name,sport_id,competition_type,management_mode,organiser_school_id,school_year,starts_on,status').eq('organiser_school_id',schoolId.value).order('school_year',{ascending:false}).order('starts_on',{ascending:false}),
+   db.from('competitions').select('id,name,sport_id,competition_type,management_mode,heat_entry_mode,organiser_school_id,school_year,starts_on,status').eq('organiser_school_id',schoolId.value).order('school_year',{ascending:false}).order('starts_on',{ascending:false}),
    db.from('sports').select('id,name').order('name')
   ])
   if(c.error||s.error)throw c.error||s.error
@@ -252,13 +252,15 @@ async function save(){
   if(!sports.value.some(s=>s.id===form.sport_id))throw new Error('Select a sport')
   if(selected.value){
    if(selected.value.status==='active'&&form.status!==selected.value.status)throw new Error('Use the Platform Admin Return to Registrations action.')
-   const {data,error:e}=await db.from('competitions').update({name,sport_id:form.sport_id,school_year:form.school_year,starts_on:form.starts_on||null,status:form.status}).eq('id',selected.value.id).eq('organiser_school_id',schoolId.value).select('id').single()
+   const {data,error:e}=await db.from('competitions').update({name,sport_id:form.sport_id,school_year:form.school_year,starts_on:form.starts_on||null,status:form.status,heat_entry_mode:form.heat_entry_mode}).eq('id',selected.value.id).eq('organiser_school_id',schoolId.value).select('id').single()
    if(e)throw e
    if(!data)throw new Error('Competition could not be updated')
   }else{
    const {data,error:e}=await db.rpc('create_school_competition',{p_school_id:schoolId.value,p_name:name,p_sport_id:form.sport_id,p_school_year:form.school_year,p_starts_on:form.starts_on||null})
    if(e)throw e
    if(!data)throw new Error('Competition could not be created')
+   const createdId=typeof data==='string'?data:(Array.isArray(data)?data[0]?.id:data?.id)
+   if(createdId){const {error:modeError}=await db.from('competitions').update({heat_entry_mode:form.heat_entry_mode}).eq('id',createdId).eq('organiser_school_id',schoolId.value);if(modeError)throw modeError}
   }
   confirmSave.value=false
   dialog.value=false
@@ -305,6 +307,7 @@ watch(schoolId,()=>{confirmSave.value=false;dialog.value=false;void load()},{imm
    <label class="block text-sm font-semibold">Sport<select v-model="form.sport_id" required class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option disabled value="">Select a sport</option><option v-for="s in sports" :key="s.id" :value="s.id">{{s.name}}</option></select></label>
    <div class="grid gap-4 sm:grid-cols-2">
     <label class="block text-sm font-semibold">School year<input v-model.number="form.school_year" type="number" min="2000" max="2100" required class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
+    <label class="block text-sm font-semibold">Heat results entry mode<select v-model="form.heat_entry_mode" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option value="sequential">One heat at a time (races run separately)</option><option value="simultaneous">All heats together (combined results entry)</option></select><span class="mt-1 block text-xs font-normal text-[var(--muted)]">Controls how heats appear during race-day results entry.</span></label>
     <label class="block text-sm font-semibold">Competition date<input v-model="form.starts_on" type="date" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
    </div>
    <div v-if="selected" class="space-y-3"><label class="block text-sm font-semibold">Status<select v-model="form.status" :disabled="selected.status==='active'" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 disabled:opacity-60"><option v-for="s in statuses" :key="s" :value="s">{{s.replaceAll('_',' ')}}</option></select></label><div v-if="selected.status==='active'" class="rounded-lg border border-amber-300 p-3"><p class="text-sm">Active competitions cannot be moved back using the status selector.</p><button v-if="platformAdmin" type="button" class="mt-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white" @click="rollbackTarget=selected">Return to Registrations (Platform Admin)</button><p v-else class="mt-2 text-xs text-[var(--muted)]">Only a Platform Admin can return this competition to Registrations.</p></div></div>
