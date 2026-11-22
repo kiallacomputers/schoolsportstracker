@@ -13,7 +13,8 @@ export default defineNuxtPlugin(() => {
       padding: 6px 9px;
       border-radius: 7px;
       background: #ffffff;
-      color: #17233b;\n      border: 1px solid #334155;
+      color: #17233b;
+      border: 1px solid #334155;
       font: 500 12px/1.35 system-ui, sans-serif;
       box-shadow: 0 3px 10px rgba(0,0,0,.12);
       white-space: normal;
@@ -65,6 +66,30 @@ export default defineNuxtPlugin(() => {
     const label = labelFor(button)
     if (!label) return hide()
     active = button
+    const app = button.closest<HTMLElement>('.sst')
+    const dark = app?.dataset.theme === 'dark'
+    if (dark && app) {
+      // Use the background of the button or its nearest opaque ancestor.
+      let surface: HTMLElement | null = button
+      let background = ''
+      while (surface) {
+        const bg = getComputedStyle(surface).backgroundColor
+        if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
+          background = bg
+          break
+        }
+        if (surface === app) break
+        surface = surface.parentElement
+      }
+      tip.style.backgroundColor = background || getComputedStyle(app).getPropertyValue('--surface').trim()
+      const icon = button.querySelector<SVGElement | HTMLElement>('svg, i')
+      tip.style.color = icon ? getComputedStyle(icon).color : getComputedStyle(button).color
+      tip.style.borderColor = getComputedStyle(app).getPropertyValue('--border').trim()
+    } else {
+      tip.style.backgroundColor = '#ffffff'
+      tip.style.color = '#17233b'
+      tip.style.borderColor = '#334155'
+    }
     tip.textContent = label
     tip.dataset.visible = 'true'
     position(button)
