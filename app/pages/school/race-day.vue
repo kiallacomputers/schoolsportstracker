@@ -4,6 +4,32 @@ const db=useSupabaseClient()
 const {schoolId}=useSchool()
 const competitions=ref<any[]>([]),events=ref<any[]>([]),rounds=ref<any[]>([]),entries=ref<any[]>([]),results=ref<any[]>([]),houses=ref<any[]>([]),totals=ref<any[]>([])
 const competitionId=ref(''),eventId=ref(''),roundId=ref('')
+const resultsDialog=ref(false),scheduleRows=ref<any[]>([]),scheduleLoading=ref(false),scheduleError=ref('')
+const scheduleView=computed(()=>[...scheduleRows.value].sort((a,b)=>String(a.scheduled_on||'9999').localeCompare(String(b.scheduled_on||'9999'))||String(a.starts_at||'99:99').localeCompare(String(b.starts_at||'99:99'))||(a.schedule_order??9999)-(b.schedule_order??9999)||(a.round_order??0)-(b.round_order??0)))
+async function openScheduledRound(row:any){if(row.locked)return;eventId.value=row.event_id;await loadRounds();roundId.value=row.id;await loadResults();resultsDialog.value=true}
+async function closeScheduledRound(){if(busy.value||publishing.value)return;resultsDialog.value=false;await loadSchedule()}
+async function loadSchedule(){
+ if(!competitionId.value)return
+ scheduleLoading.value=true;scheduleError.value=''
+ try{
+  const ids=events.value.map(e=>e.id)
+  if(!ids.length){scheduleRows.value=[];return}
+  const [rr,ee]=await Promise.all([db.from('event_rounds').select('id,name,round_order,competition_event_id').in('competition_event_id',ids),db.from('event_entries').select('id,competition_event_id').in('competition_event_id',ids)])
+  if(rr.error||ee.error)throw rr.error||ee.error
+  const roundsAll=rr.data||[]
+  const resultResponse=roundsAll.length?await db.from('event_results').select('round_id,entry_id,published_at').in('round_id',roundsAll.map(r=>r.id)):null
+  if(resultResponse?.error)throw resultResponse.error
+  const resultAll=resultResponse?.data||[]
+  scheduleRows.value=roundsAll.map(r=>{
+   const ev=events.value.find(e=>e.id===r.competition_event_id)
+   const entryIds=new Set((ee.data||[]).filter(e=>e.competition_event_id===r.competition_event_id).map(e=>e.id))
+   const status=(round:any)=>{const saved=resultAll.filter(x=>x.round_id===round.id&&entryIds.has(x.entry_id));return entryIds.size&&saved.length===entryIds.size&&saved.every(x=>!!x.published_at)?'Published':saved.length?'Results entered':'Ready'}
+   const locked=roundsAll.some(prev=>prev.competition_event_id===r.competition_event_id&&(prev.round_order??0)<(r.round_order??0)&&status(prev)!=='Published')
+   return {...r,event_id:r.competition_event_id,event_name:eventLabel(ev),scheduled_on:ev?.scheduled_on,starts_at:ev?.starts_at,schedule_order:ev?.schedule_order,locked,status:status(r)==='Published'?'Published':locked?'Awaiting previous round':status(r)}
+  })
+ }catch(e:any){scheduleError.value=e.message||'Unable to load running order'}finally{scheduleLoading.value=false}
+}
+
 const completedRoundIds=ref<string[]>([])
 const availableRounds=computed(()=>rounds.value.filter(r=>!completedRoundIds.value.includes(r.id)))
 const multipleActiveCompetitions=computed(()=>competitions.value.filter(c=>c.status==='active').length>1)
@@ -225,11 +251,12 @@ async function loadEvents(){
  loading.value=true;error.value=''
  try{
   const [e,t]=await Promise.all([
-   query('competition_events','id,competition_id,age_group,division,is_team,min_age,max_age,max_participants,event_definitions(name,measurement)','competition_id',competitionId.value),
+   query('competition_events','id,competition_id,age_group,division,is_team,min_age,max_age,max_participants,scheduled_on,starts_at,schedule_order,event_definitions(name,measurement)','competition_id',competitionId.value),
    query('competition_house_totals','competition_id,school_id,house_id,total_points,scored_results','competition_id',competitionId.value)
   ])
   events.value=e;totals.value=t.filter((v:any)=>v.school_id===schoolId.value)
   await loadStudents()
+  await loadSchedule()
  }catch(e:any){error.value=e.message||'Unable to load events'}finally{loading.value=false}
 }
 async function loadRounds(){
@@ -339,6 +366,7 @@ async function publishRound(){
   totals.value=(updatedTotals||[]).filter((t:any)=>t.school_id===schoolId.value)
   await refreshRoundAvailability()
   if(completedRoundIds.value.includes(roundId.value)){roundId.value='';results.value=[];batchRows.value=[];if(availableRounds.value.length===1){roundId.value=availableRounds.value[0].id;await loadResults()}}
+  await loadSchedule()
   notice.value='Round results published and house points updated'
  }catch(e:any){error.value=e.message||'Unable to publish round results. Refresh to check progress before retrying.'}
  finally{publishing.value=false}
@@ -351,22 +379,13 @@ watch(schoolId,loadCompetitions,{immediate:true})
  <p v-if="error" role="alert" class="rounded-xl border border-red-300 bg-red-50 p-4 text-red-700">{{error}}</p>
  <p v-if="notice" role="status" class="rounded-xl border border-green-300 bg-green-50 p-4 text-green-800">{{notice}}</p>
  <UiPanel>
-  <p v-if="!competitionId&&!loading&&!multipleActiveCompetitions" class="mb-4 text-sm text-[var(--muted)]">No active competition is available for this school. Activate a competition in Competitions to begin Race Day.</p>
-  <p v-if="competitionId" class="mb-4 text-sm"><span class="font-semibold">Active competition:</span> {{competitionSettings?.name}}</p>
-  <div v-if="competitionId" class="grid gap-4 md:grid-cols-2">
-   <label class="block font-semibold">Event<select v-model="eventId" :disabled="!competitionId" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" @change="loadRounds"><option value="">Choose event</option><option v-for="e in events" :key="e.id" :value="e.id">{{eventLabel(e)}}</option></select></label>
-   <label v-if="availableRounds.length" class="block font-semibold">Round<select v-model="roundId" :disabled="!eventId" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" @change="loadResults"><option value="">Choose round</option><option v-for="r in availableRounds" :key="r.id" :value="r.id">{{r.name}}</option></select></label>
-  </div>
-  <p v-if="loading" class="mt-4 text-sm text-[var(--muted)]">Loading…</p>
-  <p v-else-if="eventId&&rounds.length&&!availableRounds.length" class="mt-3 text-sm text-[var(--muted)]">All rounds for this event are completed and published.</p>
-  <div v-if="eventId" class="mt-4 flex flex-wrap items-center gap-2">
-   <button type="button" aria-label="Add round" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white" @click="openRound()">+ Add round</button>
-   <button v-if="!rounds.length" type="button" aria-label="Create final round" class="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold" @click="openRound()">Create single Final</button>
-   <button v-if="selectedRound" type="button" aria-label="Edit selected round" class="rounded-lg border border-[var(--border)] px-3 py-2 text-blue-500" @click="openRound(selectedRound)">✎ Edit round</button>
-  </div>
-  <p v-if="!loading&&eventId&&!rounds.length" class="mt-4 text-sm text-[var(--muted)]">No rounds yet. Create a Final for a single-round event, or add Heat 1, Heat 2 and Final separately.</p>
+ <div class="mb-4 flex items-center justify-between gap-3"><div><h2 class="text-lg font-bold">Event Day running order</h2><p class="text-xs text-[var(--muted)]">Scheduled times are set by the School Admin.</p></div><button type="button" class="rounded-lg border border-[var(--border)] px-3 py-2 text-sm" :disabled="scheduleLoading" @click="loadSchedule">Refresh</button></div>
+ <p v-if="!competitionId&&!loading" class="text-sm">No active competition. Activate a competition to begin Event Day.</p>
+ <p v-if="scheduleError" role="alert" class="text-sm text-red-600">{{scheduleError}}</p>
+ <p v-if="scheduleLoading" class="text-sm">Loading running order…</p>
+ <div v-else-if="competitionId" class="overflow-x-auto"><table class="w-full min-w-[560px] text-left text-sm"><thead class="bg-[var(--panel)]"><tr><th class="p-3">Time</th><th class="p-3">Event</th><th class="p-3">Round</th><th class="p-3">Status</th><th class="p-3 text-right">Action</th></tr></thead><tbody><tr v-for="row in scheduleView" :key="row.id" class="border-b border-[var(--border)]"><td class="p-3">{{row.starts_at?String(row.starts_at).slice(0,5):'Unscheduled'}}</td><td class="p-3 font-semibold">{{row.event_name}}</td><td class="p-3">{{row.name}}</td><td class="p-3" :class="row.locked?'text-amber-600':row.status==='Published'?'text-green-600':'text-blue-600'">{{row.status}}</td><td class="p-3 text-right"><button type="button" class="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-blue-600 disabled:opacity-40" :disabled="row.locked" @click="openScheduledRound(row)">{{row.status==='Published'?'View Results':'Enter Results'}}</button></td></tr></tbody></table><p v-if="!scheduleView.length" class="py-4 text-sm">No event rounds configured yet.</p></div>
  </UiPanel>
- <UiPanel v-if="eventId"><p class="text-sm text-[var(--muted)]">{{entries.length}} registered competitors. Registrations are locked during Event Day; manage them under <NuxtLink to="/school/registrations" class="font-semibold text-blue-500 underline">Competitions → Registrations</NuxtLink> before activation.</p></UiPanel>
+ <div v-if="resultsDialog" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-3 sm:p-6" @click.self="closeScheduledRound"><section role="dialog" aria-modal="true" aria-label="Event results" class="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl"><header class="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-5 py-4"><div><h2 class="text-xl font-bold">{{eventLabel(selectedEvent)}} · {{selectedRound?.name}}</h2></div><button type="button" aria-label="Close results" title="Close" class="rounded-lg border px-3 py-2" @click="closeScheduledRound">✕</button></header><div class="min-h-0 overflow-y-auto p-4 sm:p-6">
  <div v-if="roundId" class="space-y-4">
  <UiPanel>
   <div class="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h2 class="text-lg font-bold">Enter round results</h2><p class="text-xs text-[var(--muted)]">{{selectedRound?.name}} · {{results.length}}/{{entries.length}} saved</p></div><div class="flex gap-2"><button type="button" class="rounded-lg border border-[var(--border)] px-3 py-2 text-sm" :disabled="busy" @click="populateBatch">Reset</button><button type="button" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" :disabled="busy||roundPublished||!batchReady||!batchDirty" @click="askBatchSave">{{busy?'Saving…':'Save all results'}}</button></div></div>
@@ -393,6 +412,7 @@ watch(schoolId,loadCompetitions,{immediate:true})
   <p class="mt-3 text-[var(--muted)]">{{roundDeleteConfirm?'Delete '+roundForm.name+'? This cannot be undone.':'Save '+roundForm.name+' for this event?'}}</p>
   <div class="mt-6 flex justify-end gap-3"><button type="button" aria-label="Cancel confirmation" class="rounded-lg border border-[var(--border)] px-4 py-2" @click="roundConfirm=false;roundDeleteConfirm=false">Cancel</button><button type="button" :aria-label="roundDeleteConfirm?'Confirm delete round':'Confirm save round'" :disabled="roundBusy" class="rounded-lg px-4 py-2 text-white" :class="roundDeleteConfirm?'bg-red-600':'bg-blue-600'" @click="roundDeleteConfirm?deleteRound():saveRound()">{{roundDeleteConfirm?'Delete':'Save'}}</button></div>
  </section></div>
+ </div></section></div>
  <div v-if="publishConfirm" class="fixed inset-0 z-[80] grid place-items-center bg-black/70 p-4"><section role="alertdialog" aria-modal="true" aria-label="Publish round results" class="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 shadow-2xl"><h2 class="text-xl font-bold">Publish all round results?</h2><p class="mt-3 text-[var(--muted)]">This publishes all {{results.length}} results for {{selectedRound?.name}} and awards house points using the competition scoring scheme.</p><div class="mt-6 flex justify-end gap-3"><button type="button" class="rounded-lg border border-[var(--border)] px-4 py-2" @click="publishConfirm=false">Cancel</button><button type="button" class="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white" :disabled="publishing" @click="publishRound">Confirm publish</button></div></section></div>
  <div v-if="confirm" class="fixed inset-0 z-[70] grid place-items-center bg-black/70 p-4"><section role="alertdialog" aria-modal="true" class="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 shadow-2xl"><h2 class="text-xl font-bold">Save result?</h2><p class="mt-3 text-[var(--muted)]">Confirm saving all entered results as drafts. Publish separately when ready.</p><div class="mt-6 flex justify-end gap-3"><button type="button" aria-label="Cancel" class="rounded-xl border border-[var(--border)] px-4 py-2" @click="confirm=false">Cancel</button><button type="button" aria-label="Confirm save" :disabled="busy" class="rounded-xl bg-blue-600 px-4 py-2 text-white" @click="saveBatch">Confirm save</button></div></section></div>
 </div>
