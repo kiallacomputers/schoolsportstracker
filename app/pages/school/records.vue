@@ -20,7 +20,7 @@ const matching=computed(()=>candidates.value.filter(r=>r.competition_type===(rec
 const improved=computed(()=>current.value?matching.value.filter(r=>timeBased.value?r.performance_value<current.value.performance_value:r.performance_value>current.value.performance_value).sort((a,b)=>timeBased.value?a.performance_value-b.performance_value:b.performance_value-a.performance_value):[])
 function downloadRecordCsvTemplate(){
  const columns=['record_type','event','age_group','division','performance','holder_name','achieved_on','notes']
- const csv=columns.join(',')+'\r\n'
+ const csv=columns.join(',')+'\r\n'+'SR,100m Spirit,Under 13,Boys,0:14:52,John Smith,2025-03-15,Example record - delete before importing'+'\r\n'
  const url=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'}))
  const link=document.createElement('a')
  link.href=url;link.download='sportstracker-school-records-template.csv'
