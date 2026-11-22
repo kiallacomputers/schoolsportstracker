@@ -2,10 +2,15 @@
 definePageMeta({layout:'workspace'})
 const db=useSupabaseClient()
 const {schoolId}=useSchool()
-const definitions=ref<any[]>([]),records=ref<any[]>([]),candidates=ref<any[]>([])
+const definitions=ref<any[]>([]),records=ref<any[]>([]),candidates=ref<any[]>([]),schoolEvents=ref<any[]>([])
 const selectedDefinition=ref(''),ageGroup=ref(''),division=ref(''),holder=ref(''),value=ref(''),achieved=ref('')
 const busy=ref(false),error=ref(''),notice=ref(''),confirm=ref(false)
 const definition=computed(()=>definitions.value.find(d=>d.id===selectedDefinition.value))
+const availableDefinitions=computed(()=>definitions.value.filter(d=>schoolEvents.value.some(e=>e.event_definition_id===d.id)))
+const availableAges=computed(()=>[...new Set(schoolEvents.value.filter(e=>e.event_definition_id===selectedDefinition.value).map(e=>e.age_group||''))].sort())
+const availableDivisions=computed(()=>[...new Set(schoolEvents.value.filter(e=>e.event_definition_id===selectedDefinition.value&&(e.age_group||'')===ageGroup.value).map(e=>e.division||''))].sort())
+function selectFirstAge(){if(!availableAges.value.includes(ageGroup.value))ageGroup.value=availableAges.value[0]||'';selectFirstDivision()}
+function selectFirstDivision(){if(!availableDivisions.value.includes(division.value))division.value=availableDivisions.value[0]||''}
 const current=computed(()=>records.value.find(r=>r.event_definition_id===selectedDefinition.value&&r.age_group===ageGroup.value&&r.division===division.value))
 const timeBased=computed(()=>definition.value?.measurement?.startsWith('time'))
 const format=(v:number)=>definition.value?.measurement==='distance_mm'?(v/1000).toFixed(3)+' m':definition.value?.measurement==='time_ms'?(v/1000).toFixed(3)+' s':String(v)
@@ -22,9 +27,10 @@ async function load(){
    db.from('competition_events').select('id,event_definition_id,age_group,division,competitions!inner(organiser_school_id),event_rounds(id,event_results(id,status,published_at,performance_value,entry_id,event_entries(team_name,entry_participants(student_id,students(given_name,family_name)))))').eq('competitions.organiser_school_id',schoolId.value)
   ])
   for(const q of [d,r,c])if(q.error)throw q.error
-  definitions.value=d.data||[];records.value=r.data||[]
+  definitions.value=d.data||[];records.value=r.data||[];schoolEvents.value=c.data||[]
   candidates.value=(c.data||[]).flatMap((e:any)=>(e.event_rounds||[]).flatMap((round:any)=>(round.event_results||[]).map((result:any)=>({...result,event_definition_id:e.event_definition_id,age_group:e.age_group||'',division:e.division||'',holder_name:result.event_entries?.team_name||(result.event_entries?.entry_participants||[]).map((p:any)=>[p.students?.given_name,p.students?.family_name].filter(Boolean).join(' ')).join(', ')||'Unknown student'}))))
-  if(!selectedDefinition.value)selectedDefinition.value=definitions.value[0]?.id||''
+  if(!availableDefinitions.value.some(d=>d.id===selectedDefinition.value))selectedDefinition.value=availableDefinitions.value[0]?.id||''
+  selectFirstAge()
   resetForm()
  }catch(e:any){error.value=e.message||'Unable to load school records'}finally{busy.value=false}
 }
@@ -41,6 +47,8 @@ async function save(){
  }catch(e:any){error.value=e.message||'Unable to save record'}finally{busy.value=false}
 }
 watch(schoolId,load,{immediate:true})
+watch(selectedDefinition,selectFirstAge)
+watch(ageGroup,selectFirstDivision)
 watch([selectedDefinition,ageGroup,division],resetForm)
 </script>
 <template>
@@ -49,10 +57,11 @@ watch([selectedDefinition,ageGroup,division],resetForm)
  <p v-if="error" role="alert" class="rounded-lg bg-red-50 p-3 text-red-700">{{error}}</p>
  <p v-if="notice" role="status" class="text-green-600">{{notice}}</p>
  <UiPanel>
+  <p class="mb-3 text-sm text-[var(--muted)]">Event, age group and division are populated from competitions configured for this school.</p>
   <div class="grid gap-4 md:grid-cols-3">
-   <label class="text-sm font-semibold">Event<select v-model="selectedDefinition" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option v-for="d in definitions" :key="d.id" :value="d.id">{{d.name}}</option></select></label>
-   <label class="text-sm font-semibold">Age group<input v-model="ageGroup" placeholder="e.g. Under 15" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
-   <label class="text-sm font-semibold">Division<input v-model="division" placeholder="e.g. Boys" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
+   <label class="text-sm font-semibold">Event<select v-model="selectedDefinition" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option v-for="d in availableDefinitions" :key="d.id" :value="d.id">{{d.name}}</option></select></label>
+   <label class="text-sm font-semibold">Age group<select v-model="ageGroup" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option v-for="a in availableAges" :key="a" :value="a">{{a||"All ages"}}</option></select></label>
+   <label class="text-sm font-semibold">Division<select v-model="division" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option v-for="d in availableDivisions" :key="d" :value="d">{{d||"All divisions"}}</option></select></label>
   </div>
  </UiPanel>
  <UiPanel>
