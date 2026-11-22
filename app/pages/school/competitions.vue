@@ -9,6 +9,7 @@ const competitions=ref<Competition[]>([])
 const sports=ref<Sport[]>([])
 const loading=ref(false),busy=ref(false),error=ref(''),notice=ref('')
 const search=ref(''),statusFilter=ref('all'),dialog=ref(false),confirmSave=ref(false),selected=ref<Competition|null>(null)
+const rollbackTarget=ref<Competition|null>(null),rollbackBusy=ref(false)
 type EventDefinition={id:string;sport_id:string;name:string;measurement:string}
 type CompetitionEvent={id:string;competition_id:string;event_definition_id:string;age_group:string|null;division:string|null;is_team:boolean;min_age:number|null;max_age:number|null;max_participants:number|null;scheduled_on:string|null;starts_at:string|null;venue:string|null;schedule_order:number|null;duration_minutes:number|null}
 type AgeGroup={id:string;competition_id:string;name:string;min_age:number|null;max_age:number|null}
@@ -224,6 +225,19 @@ async function load(){
  }catch(e:any){error.value=e.message||'Unable to load competitions'}
  finally{loading.value=false}
 }
+async function rollbackToRegistration(){
+ const c=rollbackTarget.value
+ if(!c||!platformAdmin.value||rollbackBusy.value)return
+ rollbackBusy.value=true;error.value='';notice.value=''
+ try{
+  const {error:e}=await db.rpc('return_competition_to_registration',{p_competition_id:c.id})
+  if(e)throw e
+  rollbackTarget.value=null
+  notice.value=c.name+' returned to Registrations. Review registrations before activating again.'
+  await load()
+ }catch(e:any){error.value=e.message||'Unable to return competition to registration'}
+ finally{rollbackBusy.value=false}
+}
 function requestSave(){if(!busy.value)confirmSave.value=true}
 async function save(){
  if(busy.value||!schoolId.value)return
@@ -235,6 +249,7 @@ async function save(){
   if(!Number.isInteger(form.school_year)||form.school_year<2000||form.school_year>2100)throw new Error('Enter a valid school year')
   if(!sports.value.some(s=>s.id===form.sport_id))throw new Error('Select a sport')
   if(selected.value){
+   if(selected.value.status==='active'&&form.status==='registration')throw new Error('Use the Platform Admin Return to Registrations action.')
    const {data,error:e}=await db.from('competitions').update({name,sport_id:form.sport_id,school_year:form.school_year,starts_on:form.starts_on||null,status:form.status}).eq('id',selected.value.id).eq('organiser_school_id',schoolId.value).select('id').single()
    if(e)throw e
    if(!data)throw new Error('Competition could not be updated')
@@ -255,7 +270,8 @@ watch(schoolId,()=>{confirmSave.value=false;dialog.value=false;void load()},{imm
 <template>
 <div class="space-y-6">
  <UiPageHeader title="Competitions" description="Create and manage your school's athletics, swimming and other sporting competitions.">
-  <template #actions><button v-if="canCreate" aria-label="New competition" title="New competition" class="rounded-xl bg-blue-600 p-3 text-white hover:bg-blue-700" @click="reset"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></template>
+  <template #actions><button v-if="canCreate" aria-label="New competition" title="New competition" class="rounded-xl bg-blue-600 p-3 text-white hover:bg-blue-700" @click="reset"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button> <div v-if="rollbackTarget" class="fixed inset-0 z-[70] grid place-items-center bg-black/70 p-4"><section role="alertdialog" aria-modal="true" aria-label="Return competition to Registrations" class="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl"><h2 class="text-xl font-bold">Return to Registrations?</h2><p class="mt-3 text-sm">Return <strong>{{rollbackTarget.name}}</strong> from Active to Registrations? Event Day will become unavailable and registrations can be reviewed before reactivation.</p><p class="mt-2 text-sm text-amber-700">This is only allowed when no results have been entered. Existing event and round configuration is preserved.</p><div class="mt-5 flex justify-end gap-3"><button type="button" class="rounded-lg border border-[var(--border)] px-4 py-2" :disabled="rollbackBusy" @click="rollbackTarget=null">Cancel</button><button type="button" class="rounded-lg bg-amber-600 px-4 py-2 font-semibold text-white disabled:opacity-50" :disabled="rollbackBusy" @click="rollbackToRegistration">{{rollbackBusy?'Returning…':'Confirm return'}}</button></div></section></div>
+</template>
  </UiPageHeader>
  <p v-if="error" role="alert" class="rounded-xl bg-red-50 p-4 text-red-700">{{error}}</p>
  <p v-if="notice" role="status" class="text-sm text-green-700">{{notice}}</p>
@@ -268,7 +284,7 @@ watch(schoolId,()=>{confirmSave.value=false;dialog.value=false;void load()},{imm
   <p v-if="loading">Loading competitions…</p>
   <div v-else class="overflow-x-auto"><table class="w-full min-w-[650px] text-left text-sm">
    <thead><tr class="border-b border-[var(--border)] text-[var(--muted)]"><th class="py-3">Competition</th><th class="p-3">Sport</th><th class="p-3">School year</th><th class="p-3">Date</th><th class="p-3">Status</th><th class="p-3">Action</th></tr></thead>
-   <tbody><tr v-for="c in visible" :key="c.id" class="border-b border-[var(--border)]"><td class="py-4 font-semibold">{{c.name}}</td><td class="p-3">{{sportName(c.sport_id)}}</td><td class="p-3">{{c.school_year}}</td><td class="p-3">{{c.starts_on||'Not scheduled'}}</td><td class="p-3 capitalize">{{c.status.replaceAll('_',' ')}}</td><td class="p-3"><div class="flex items-center gap-2"><button :aria-label="'Manage events for '+c.name" :title="'Manage events for '+c.name" class="rounded-lg border border-[var(--border)] p-2 text-blue-600" @click="openEvents(c)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h1M3 12h1M3 18h1"/></svg></button><button :aria-label="'Scoring settings for '+c.name" :title="'Scoring settings for '+c.name" class="rounded-lg border border-[var(--border)] p-2 text-blue-600" @click="openScoring(c)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v6a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4v2a4 4 0 0 0 4 4M17 6h3v2a4 4 0 0 1-4 4"/></svg></button><button v-if="canEdit(c)"  :aria-label="'Edit '+c.name" :title="'Edit '+c.name" class="rounded-lg border border-[var(--border)] p-2 text-blue-600" @click="edit(c)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg></button><span v-else class="text-xs text-[var(--muted)]">View only</span></div></td></tr></tbody>
+   <tbody><tr v-for="c in visible" :key="c.id" class="border-b border-[var(--border)]"><td class="py-4 font-semibold">{{c.name}}</td><td class="p-3">{{sportName(c.sport_id)}}</td><td class="p-3">{{c.school_year}}</td><td class="p-3">{{c.starts_on||'Not scheduled'}}</td><td class="p-3 capitalize">{{c.status.replaceAll('_',' ')}}</td><td class="p-3"><div class="flex items-center gap-2"><button :aria-label="'Manage events for '+c.name" :title="'Manage events for '+c.name" class="rounded-lg border border-[var(--border)] p-2 text-blue-600" @click="openEvents(c)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h1M3 12h1M3 18h1"/></svg></button><button :aria-label="'Scoring settings for '+c.name" :title="'Scoring settings for '+c.name" class="rounded-lg border border-[var(--border)] p-2 text-blue-600" @click="openScoring(c)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v6a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4v2a4 4 0 0 0 4 4M17 6h3v2a4 4 0 0 1-4 4"/></svg></button><button v-if="platformAdmin&&c.status==='active'" type="button" :aria-label="'Return '+c.name+' to Registrations'" title="Return to Registrations (Platform Admin)" class="rounded-lg border border-[var(--border)] p-2 text-amber-600" @click="rollbackTarget=c"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-2"/></svg></button><button v-if="canEdit(c)"  :aria-label="'Edit '+c.name" :title="'Edit '+c.name" class="rounded-lg border border-[var(--border)] p-2 text-blue-600" @click="edit(c)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg></button><span v-else class="text-xs text-[var(--muted)]">View only</span></div></td></tr></tbody>
   </table><p v-if="!visible.length" class="py-8 text-center text-sm text-[var(--muted)]">No matching competitions.</p></div>
  </UiPanel>
  <div v-if="dialog" class="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" @click.self="close"><section role="dialog" aria-modal="true" aria-label="Competition details" class="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl">
@@ -280,7 +296,7 @@ watch(schoolId,()=>{confirmSave.value=false;dialog.value=false;void load()},{imm
     <label class="block text-sm font-semibold">School year<input v-model.number="form.school_year" type="number" min="2000" max="2100" required class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
     <label class="block text-sm font-semibold">Competition date<input v-model="form.starts_on" type="date" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
    </div>
-   <label v-if="selected" class="block text-sm font-semibold">Status<select v-model="form.status" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option v-for="s in statuses" :key="s" :value="s">{{s.replaceAll('_',' ')}}</option></select></label>
+   <label v-if="selected" class="block text-sm font-semibold">Status<select v-model="form.status" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option v-for="s in statuses.filter(s=>!(selected?.status==='active'&&s==='registration'))" :key="s" :value="s">{{s.replaceAll('_',' ')}}</option></select></label>
    <p v-else class="text-sm text-[var(--muted)]">New competitions are created as drafts. Registration and event settings will be configured in the next stage.</p>
    <div class="flex justify-end gap-3"><button type="button" aria-label="Cancel" title="Cancel" class="rounded-xl border border-[var(--border)] p-3 text-[#991B1B]" @click="close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg></button><button type="submit" aria-label="Save competition" title="Save competition" :disabled="busy||!sports.length" class="rounded-xl bg-blue-600 p-3 text-white disabled:opacity-50"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button></div>
   </form>
