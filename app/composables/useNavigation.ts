@@ -9,7 +9,7 @@ export function useNavigation() {
       {label:'Students',to:'/school/students'+suffix},
       {label:'Competitions',to:'/school/competitions'+suffix},
       {label:'Registrations',to:'/school/entries'+suffix},
-      {label:'Event Day',to:'/school/race-day'+suffix},
+      {label:'Race Day',to:'/school/race-day'+suffix},
       {label:'Results',to:'/school/results'+suffix},
       ...(platformAdmin.value||schoolRole.value==='school_admin'?[{label:'Year Rollover',to:'/school/rollover'+suffix},{label:'Access Scopes',to:'/school/access-scopes'+suffix}]:[])
     ]:[]
