@@ -6,7 +6,7 @@ const competitions=ref<any[]>([]),events=ref<any[]>([]),rounds=ref<any[]>([]),en
 const competitionId=ref(''),eventId=ref(''),roundId=ref('')
 const resultsDialog=ref(false),scheduleRows=ref<any[]>([]),scheduleLoading=ref(false),scheduleError=ref('')
 const scheduleView=computed(()=>[...scheduleRows.value].sort((a,b)=>String(a.scheduled_on||'9999').localeCompare(String(b.scheduled_on||'9999'))||String(a.starts_at||'99:99').localeCompare(String(b.starts_at||'99:99'))||(a.schedule_order??9999)-(b.schedule_order??9999)||(a.round_order??0)-(b.round_order??0)))
-async function openScheduledRound(row:any){if(row.locked)return;eventId.value=row.event_id;await loadRounds();roundId.value=row.id;await loadResults();resultsDialog.value=true}
+async function openScheduledRound(row:any){if(row.locked)return;eventId.value=row.event_id;await loadRounds();roundId.value=row.id;await loadResults();await loadRecordBaselines();resultsDialog.value=true}
 async function closeScheduledRound(){if(busy.value||publishing.value)return;resultsDialog.value=false;await loadSchedule()}
 async function loadSchedule(){
  if(!competitionId.value)return
@@ -251,7 +251,7 @@ async function loadEvents(){
  loading.value=true;error.value=''
  try{
   const [e,t]=await Promise.all([
-   query('competition_events','id,competition_id,age_group,division,is_team,min_age,max_age,max_participants,scheduled_on,starts_at,schedule_order,event_definitions(name,measurement)','competition_id',competitionId.value),
+   query('competition_events','id,competition_id,event_definition_id,age_group,division,is_team,min_age,max_age,max_participants,scheduled_on,starts_at,schedule_order,event_definitions(name,measurement)','competition_id',competitionId.value),
    query('competition_house_totals','competition_id,school_id,house_id,total_points,scored_results','competition_id',competitionId.value)
   ])
   events.value=e;totals.value=t.filter((v:any)=>v.school_id===schoolId.value)
@@ -291,6 +291,22 @@ async function loadResults(){
  if(!roundId.value)return
  try{results.value=await query('event_results','id,entry_id,placing_position,performance_value,status,points,published_at,record_badge','round_id',roundId.value);populateBatch()}
  catch(e:any){error.value=e.message||'Unable to load results'}
+}
+const recordBaselines=ref<any[]>([]),recordCheckError=ref('')
+async function loadRecordBaselines(){
+ recordBaselines.value=[];recordCheckError.value=''
+ const ev=selectedEvent.value
+ if(!schoolId.value||!ev)return
+ const {data,error:e}=await db.from('school_records').select('record_scope,performance_value').eq('school_id',schoolId.value).eq('event_definition_id',ev.event_definition_id).eq('age_group',ev.age_group).eq('division',ev.division).in('record_scope',['SR','ISR'])
+ if(e){recordCheckError.value='Record benchmarks unavailable: '+e.message;return}
+ recordBaselines.value=data||[]
+}
+function potentialRecords(row:{performance_value:string;status:string}){
+ if(row.status!=='valid'||!validPerformance(row.performance_value))return []
+ return ['SR','ISR'].filter(scope=>{
+  const b=recordBaselines.value.find(x=>x.record_scope===scope)
+  return b&&b.performance_value!=null&&(lowerIsBetter.value?Number(row.performance_value)<Number(b.performance_value):Number(row.performance_value)>Number(b.performance_value))
+ })
 }
 const batchRows=ref<{entry_id:string;performance_value:string;status:string}[]>([])
 const batchSnapshot=ref('')
@@ -389,8 +405,8 @@ watch(schoolId,loadCompetitions,{immediate:true})
  <div v-if="roundId" class="space-y-4">
  <UiPanel>
   <div class="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h2 class="text-lg font-bold">Enter round results</h2><p class="text-xs text-[var(--muted)]">{{selectedRound?.name}} · {{results.length}}/{{entries.length}} saved</p></div><div class="flex gap-2"><button type="button" class="rounded-lg border border-[var(--border)] px-3 py-2 text-sm" :disabled="busy" @click="populateBatch">Reset</button><button type="button" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" :disabled="busy||roundPublished||!batchReady||!batchDirty" @click="askBatchSave">{{busy?'Saving…':'Save all results'}}</button></div></div>
-  <div class="overflow-x-auto rounded-lg border border-[var(--border)]"><table class="w-full min-w-[490px] text-left text-sm"><thead class="bg-[var(--panel)] text-xs"><tr><th class="px-3 py-2">Student / team</th><th class="px-2 py-2">House</th><th class="px-2 py-2">Performance</th><th class="px-2 py-2">Status</th><th class="px-2 py-2">Place</th></tr></thead><tbody><tr v-for="row in batchRows" :key="row.entry_id" class="border-t border-[var(--border)]"><td class="px-3 py-1.5 font-medium">{{entryName(entries.find(e=>e.id===row.entry_id))}}</td><td class="px-2 py-1.5 text-xs">{{houseName(entries.find(e=>e.id===row.entry_id)?.house_id)}}</td><td class="px-2 py-1.5"><input v-model="row.performance_value" type="number" min="1" step="1" :disabled="roundPublished||row.status!=='valid'" :aria-label="'Performance for '+entryName(entries.find(e=>e.id===row.entry_id))" class="w-28 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 disabled:opacity-40" placeholder="Value"/></td><td class="px-2 py-1.5"><select v-model="row.status" :disabled="roundPublished" :aria-label="'Status for '+entryName(entries.find(e=>e.id===row.entry_id))" class="w-24 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5"><option value="valid">Valid</option><option value="dns">DNS</option><option value="dnf">DNF</option><option value="dq">DQ</option></select></td><td class="px-2 py-1.5 font-bold">{{batchPlace(row)??'—'}}</td></tr></tbody></table></div>
-  <p v-if="!entries.length" class="mt-3 text-sm text-[var(--muted)]">Register participants to enter results.</p><p class="mt-2 text-xs text-[var(--muted)]">Enter millimetres for distance or milliseconds for time. Placings calculate automatically.</p>
+  <div class="overflow-x-auto rounded-lg border border-[var(--border)]"><table class="w-full min-w-[490px] text-left text-sm"><thead class="bg-[var(--panel)] text-xs"><tr><th class="px-3 py-2">Student / team</th><th class="px-2 py-2">House</th><th class="px-2 py-2">Performance</th><th class="px-2 py-2">Status</th><th class="px-2 py-2">Place</th><th class="px-2 py-2">Records</th></tr></thead><tbody><tr v-for="row in batchRows" :key="row.entry_id" class="border-t border-[var(--border)]"><td class="px-3 py-1.5 font-medium">{{entryName(entries.find(e=>e.id===row.entry_id))}}</td><td class="px-2 py-1.5 text-xs">{{houseName(entries.find(e=>e.id===row.entry_id)?.house_id)}}</td><td class="px-2 py-1.5"><input v-model="row.performance_value" type="number" min="1" step="1" :disabled="roundPublished||row.status!=='valid'" :aria-label="'Performance for '+entryName(entries.find(e=>e.id===row.entry_id))" class="w-28 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 disabled:opacity-40" placeholder="Value"/></td><td class="px-2 py-1.5"><select v-model="row.status" :disabled="roundPublished" :aria-label="'Status for '+entryName(entries.find(e=>e.id===row.entry_id))" class="w-24 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5"><option value="valid">Valid</option><option value="dns">DNS</option><option value="dnf">DNF</option><option value="dq">DQ</option></select></td><td class="px-2 py-1.5 font-bold">{{batchPlace(row)??'—'}}</td><td class="px-2 py-1.5"><div class="flex flex-wrap gap-1"><span v-for="scope in potentialRecords(row)" :key="scope" class="rounded px-2 py-1 text-xs font-semibold" :class="scope==='SR'?'bg-amber-100 text-amber-900':'bg-violet-100 text-violet-900'">Potential {{scope}}</span><span v-if="!potentialRecords(row).length" class="text-xs text-[var(--muted)]">—</span></div></td></tr></tbody></table></div>
+  <p v-if="recordCheckError" role="alert" class="mt-2 text-xs text-red-600">{{recordCheckError}}</p><p v-else class="mt-2 text-xs text-[var(--muted)]">Potential SR and ISR are checked against saved benchmarks regardless of competition type. These are provisional; official ISR recognition requires verification. <span v-if="!recordBaselines.length">No matching SR/ISR benchmarks are saved.</span></p><p v-if="!entries.length" class="mt-3 text-sm text-[var(--muted)]">Register participants to enter results.</p><p class="mt-2 text-xs text-[var(--muted)]">Enter millimetres for distance or milliseconds for time. Placings calculate automatically.</p>
  </UiPanel>
  <UiPanel><div class="flex flex-wrap items-center justify-between gap-3"><div><h2 class="text-lg font-bold">Round results</h2><p class="text-xs text-[var(--muted)]">{{results.length}}/{{entries.length}} saved · {{roundPublished?'Published':'Draft'}}</p></div><button type="button" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" :disabled="!allResultsEntered||roundPublished||publishing||batchDirty" @click="publishConfirm=true">{{roundPublished?'Results published':'Publish Results'}}</button></div><p v-if="batchDirty" class="mt-2 text-xs text-amber-700">Save changes before publishing.</p><div class="mt-3 flex flex-wrap gap-2 text-xs"><span v-for="r in sortedRoundResults" :key="r.id" class="rounded-md border border-[var(--border)] px-2 py-1">{{r.placing_position??'—'}} · {{entryName(entries.find(e=>e.id===r.entry_id))}} <strong v-if="r.record_badge" class="rounded px-1" :class="r.record_badge==='SR'?'bg-[#C99700] text-[#1F1700]':'bg-violet-100 text-violet-900'">{{r.record_badge}}</strong> · {{r.points||0}} pts</span></div></UiPanel>
  </div>
