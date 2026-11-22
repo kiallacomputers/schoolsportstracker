@@ -253,8 +253,8 @@ async function loadResults(){
 const batchRows=ref<{entry_id:string;performance_value:string;status:string}[]>([])
 const batchDirty=ref(false)
 function populateBatch(){batchRows.value=entries.value.map(e=>{const r=results.value.find(v=>v.entry_id===e.id);return {entry_id:e.id,performance_value:r?.performance_value==null?'':String(r.performance_value),status:r?.status||'valid'}});batchDirty.value=false}
-const batchReady=computed(()=>batchRows.value.length>0&&batchRows.value.every(r=>r.status!=='valid'||/^\\d+$/.test(r.performance_value)&&Number(r.performance_value)>0))
-function batchPlace(row:{entry_id:string;performance_value:string;status:string}){if(row.status!=='valid'||!/^\\d+$/.test(row.performance_value)||Number(row.performance_value)<=0)return null;return 1+batchRows.value.filter(r=>r.entry_id!==row.entry_id&&r.status==='valid'&&Number(r.performance_value)>0&&(lowerIsBetter.value?Number(r.performance_value)<Number(row.performance_value):Number(r.performance_value)>Number(row.performance_value))).length}
+const batchReady=computed(()=>batchRows.value.length>0&&batchRows.value.every(r=>r.status!=='valid'||/^\d+$/.test(r.performance_value)&&Number(r.performance_value)>0))
+function batchPlace(row:{entry_id:string;performance_value:string;status:string}){if(row.status!=='valid'||!/^\d+$/.test(row.performance_value)||Number(row.performance_value)<=0)return null;return 1+batchRows.value.filter(r=>r.entry_id!==row.entry_id&&r.status==='valid'&&Number(r.performance_value)>0&&(lowerIsBetter.value?Number(r.performance_value)<Number(row.performance_value):Number(r.performance_value)>Number(row.performance_value))).length}
 function askBatchSave(){if(!batchReady.value){error.value='Enter a positive whole-number performance for each valid result, or select DNS, DNF or DQ.';return}if(roundPublished.value){error.value='Published results are read-only';return}error.value='';confirm.value=true}
 async function saveBatch(){if(busy.value||!roundId.value)return;busy.value=true;confirm.value=false;error.value='';notice.value='';let saved=0
  try{if(!batchReady.value)throw new Error('Complete all valid performances first')
