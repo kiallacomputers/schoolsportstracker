@@ -4,7 +4,7 @@ const db=useSupabaseClient()
 const {schoolId}=useSchool()
 const competitions=ref<any[]>([]),events=ref<any[]>([]),rounds=ref<any[]>([]),entries=ref<any[]>([]),results=ref<any[]>([]),houses=ref<any[]>([]),totals=ref<any[]>([])
 const competitionId=ref(''),eventId=ref(''),roundId=ref('')
-const loading=ref(false),busy=ref(false),error=ref(''),notice=ref(''),confirm=ref(false)
+const loading=ref(false),busy=ref(false),error=ref(''),notice=ref(''),confirm=ref(false),publishConfirm=ref(false),publishing=ref(false)
 const students=ref<any[]>([]),participants=ref<any[]>([]),entryDialog=ref(false),entryConfirm=ref(false),entryBusy=ref(false),entryStudentId=ref(''),entryStudentIds=ref<string[]>([]),entrySearch=ref(''),entryTeamName=ref(''),entryTeamStudents=ref<string[]>([]),entryDeleteConfirm=ref(false),editingEntry=ref<any|null>(null)
 const studentName=(id:string)=>{const s=students.value.find(v=>v.id===id);return s?[s.given_name,s.family_name].filter(Boolean).join(' '):'Unknown student'}
 const entryMembers=(id:string)=>participants.value.filter(p=>p.entry_id===id).sort((a,b)=>(a.leg_order||0)-(b.leg_order||0)).map(p=>studentName(p.student_id))
@@ -180,7 +180,7 @@ async function deleteRound(){
  }catch(e:any){error.value=e.message||'Unable to delete round'}
  finally{roundBusy.value=false}
 }
-const form=reactive({entry_id:'',performance_value:'',status:'valid',published:false})
+const form=reactive({entry_id:'',performance_value:'',status:'valid'})
 const selectedEvent=computed(()=>events.value.find(e=>e.id===eventId.value))
 const lowerIsBetter=computed(()=>/^(time|duration)/i.test(String(selectedEvent.value?.event_definitions?.measurement||'')))
 const placingPreview=computed(()=>{
@@ -190,6 +190,8 @@ const placingPreview=computed(()=>{
 })
 const selectedRound=computed(()=>rounds.value.find(r=>r.id===roundId.value))
 const selectedResult=computed(()=>results.value.find(r=>r.entry_id===form.entry_id))
+const allResultsEntered=computed(()=>entries.value.length>0&&entries.value.every(e=>results.value.some(r=>r.entry_id===e.id)))
+const roundPublished=computed(()=>allResultsEntered.value&&results.value.every(r=>!!r.published_at))
 const sortedRoundResults=computed(()=>[...results.value].sort((a,b)=>(a.placing_position??Number.MAX_SAFE_INTEGER)-(b.placing_position??Number.MAX_SAFE_INTEGER)||Number(b.performance_value??-1)-Number(a.performance_value??-1)||entryName(entries.value.find(e=>e.id===a.entry_id)).localeCompare(entryName(entries.value.find(e=>e.id===b.entry_id)))))
 const houseName=(id:string)=>houses.value.find(h=>h.id===id)?.name||'Unassigned'
 const eventLabel=(e:any)=>[e.event_definitions?.name||'Event',e.age_group,e.division].filter(Boolean).join(' · ')
@@ -248,7 +250,7 @@ const unrecordedEntries=computed(()=>entries.value.filter(e=>!results.value.some
 function editEntry(entry:any){
  if(!entry)return
  const result=results.value.find(r=>r.entry_id===entry.id)
- Object.assign(form,{entry_id:entry.id,performance_value:result?.performance_value==null?'':String(result.performance_value),status:result?.status||'valid',published:!!result?.published_at})
+ Object.assign(form,{entry_id:entry.id,performance_value:result?.performance_value==null?'':String(result.performance_value),status:result?.status||'valid'})
  notice.value='';error.value=''
 }
 function validate(){
@@ -261,7 +263,7 @@ async function save(){
  busy.value=true;confirm.value=false;error.value=''
  try{
   validate()
-  const payload:any={round_id:roundId.value,entry_id:form.entry_id,status:form.status,placing_position:form.status==='valid'?placingPreview.value:null,performance_value:form.performance_value===''?null:Number(form.performance_value),published_at:form.published?(selectedResult.value?.published_at||new Date().toISOString()):null}
+  const payload:any={round_id:roundId.value,entry_id:form.entry_id,status:form.status,placing_position:form.status==='valid'?placingPreview.value:null,performance_value:form.performance_value===''?null:Number(form.performance_value),published_at:selectedResult.value?.published_at||null}
   const old=selectedResult.value
   const r=old?await db.from('event_results').update(payload).eq('id',old.id):await db.from('event_results').insert(payload)
   if(r.error)throw r.error
@@ -282,6 +284,27 @@ async function save(){
   totals.value=(data||[]).filter((v:any)=>v.school_id===schoolId.value)
   notice.value='Result saved successfully'
  }catch(e:any){error.value=e.message||'Unable to save result'}finally{busy.value=false}
+}
+async function publishRound(){
+ if(publishing.value||!roundId.value||!allResultsEntered.value||roundPublished.value)return
+ publishing.value=true;publishConfirm.value=false;error.value=''
+ try{
+  const {data:current,error:readError}=await db.from('event_results').select('id,entry_id,status,performance_value,placing_position,published_at').eq('round_id',roundId.value)
+  if(readError)throw readError
+  if(!current||current.length!==entries.value.length||!entries.value.every(e=>current.some(r=>r.entry_id===e.id)))throw new Error('Not every registered participant has a result. Refresh and review before publishing.')
+  if(current.some(r=>r.status==='valid'&&(r.performance_value==null||r.placing_position==null)))throw new Error('Some valid results have missing performances or placings.')
+  const timestamp=new Date().toISOString()
+  for(const result of current.filter(r=>!r.published_at)){
+   const {error:publishError}=await db.from('event_results').update({published_at:timestamp}).eq('id',result.id).is('published_at',null)
+   if(publishError)throw publishError
+  }
+  await loadResults()
+  const {data:updatedTotals,error:totalsError}=await db.from('competition_house_totals').select('competition_id,school_id,house_id,total_points,scored_results').eq('competition_id',competitionId.value)
+  if(totalsError)throw totalsError
+  totals.value=(updatedTotals||[]).filter((t:any)=>t.school_id===schoolId.value)
+  notice.value='Round results published and house points updated'
+ }catch(e:any){error.value=e.message||'Unable to publish round results. Refresh to check progress before retrying.'}
+ finally{publishing.value=false}
 }
 watch(schoolId,loadCompetitions,{immediate:true})
 </script>
@@ -318,11 +341,11 @@ watch(schoolId,loadCompetitions,{immediate:true})
     <p class="text-sm font-semibold">Automatic placing: {{placingPreview===null?'Enter a valid performance':'#'+placingPreview}} <span class="font-normal text-[var(--muted)]">(recalculated for the whole round after saving)</span></p>
     <label class="block font-semibold">Performance (stored measurement value)<input v-model="form.performance_value" type="number" min="0" step="1" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
     <label class="block font-semibold">Status<select v-model="form.status" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option value="valid">Valid</option><option value="dns">Did not start</option><option value="dnf">Did not finish</option><option value="dq">Disqualified</option></select></label>
-    <label class="flex items-center gap-3"><input v-model="form.published" type="checkbox" class="h-5 w-5"/> Publish result and award points</label>
+    
     <div class="flex justify-end"><button type="submit" aria-label="Save result" class="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white" :disabled="busy">Save result</button></div>
    </form>
   </UiPanel>
-  <UiPanel><h2 class="mb-4 text-xl font-bold">Round results</h2><div v-if="!results.length" class="text-[var(--muted)]">No results recorded.</div><div v-for="r in sortedRoundResults" :key="r.id" class="flex items-center justify-between gap-3 border-b border-[var(--border)] py-3"><div><strong>{{r.placing_position||'—'}} · {{entryName(entries.find(e=>e.id===r.entry_id))}}</strong><p class="text-xs text-[var(--muted)]">{{r.published_at?'Published':'Draft'}} · {{r.status}}</p></div><div class="flex items-center gap-3"><strong>{{r.points||0}} pts</strong><button type="button" :aria-label="'Edit result for '+r.entry_id" class="rounded-lg border border-[var(--border)] px-3 py-2 text-blue-500" @click="editEntry(entries.find(e=>e.id===r.entry_id))">✎</button></div></div></UiPanel>
+  <UiPanel><div class="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 class="text-xl font-bold">Round results</h2><button type="button" aria-label="Publish all round results" class="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" :disabled="!allResultsEntered||roundPublished||publishing" @click="publishConfirm=true">{{roundPublished?'Results published':'Publish Results'}}</button></div><p v-if="!allResultsEntered" class="mb-3 text-sm text-[var(--muted)]">{{results.length}} of {{entries.length}} participants have results. Enter all results before publishing.</p><div v-if="!results.length" class="text-[var(--muted)]">No results recorded.</div><div v-for="r in sortedRoundResults" :key="r.id" class="flex items-center justify-between gap-3 border-b border-[var(--border)] py-3"><div><strong>{{r.placing_position||'—'}} · {{entryName(entries.find(e=>e.id===r.entry_id))}}</strong><p class="text-xs text-[var(--muted)]">{{r.published_at?'Published':'Draft'}} · {{r.status}}</p></div><div class="flex items-center gap-3"><strong>{{r.points||0}} pts</strong><button type="button" :aria-label="'Edit result for '+r.entry_id" class="rounded-lg border border-[var(--border)] px-3 py-2 text-blue-500" @click="editEntry(entries.find(e=>e.id===r.entry_id))">✎</button></div></div></UiPanel>
  </div>
  <UiPanel v-if="competitionId"><h2 class="mb-4 text-xl font-bold">House leaderboard</h2><p v-if="!orderedTotals.length" class="text-[var(--muted)]">House points will appear when valid results are published.</p><div v-for="(t,i) in orderedTotals" :key="t.house_id" class="flex items-center justify-between border-b border-[var(--border)] py-3"><div class="flex items-center gap-3"><strong>{{i+1}}</strong><span class="h-4 w-4 rounded-full" :style="{background:houses.find(h=>h.id===t.house_id)?.colour||'#64748b'}"/><span>{{houseName(t.house_id)}}</span></div><strong>{{t.total_points}} points</strong></div></UiPanel>
  <div v-if="entryDialog" class="fixed inset-0 z-[65] grid place-items-center bg-black/65 p-4"><section role="dialog" aria-modal="true" aria-label="Participant registration" class="w-full max-w-lg rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl">
@@ -358,6 +381,7 @@ watch(schoolId,loadCompetitions,{immediate:true})
   <p class="mt-3 text-[var(--muted)]">{{roundDeleteConfirm?'Delete '+roundForm.name+'? This cannot be undone.':'Save '+roundForm.name+' for this event?'}}</p>
   <div class="mt-6 flex justify-end gap-3"><button type="button" aria-label="Cancel confirmation" class="rounded-lg border border-[var(--border)] px-4 py-2" @click="roundConfirm=false;roundDeleteConfirm=false">Cancel</button><button type="button" :aria-label="roundDeleteConfirm?'Confirm delete round':'Confirm save round'" :disabled="roundBusy" class="rounded-lg px-4 py-2 text-white" :class="roundDeleteConfirm?'bg-red-600':'bg-blue-600'" @click="roundDeleteConfirm?deleteRound():saveRound()">{{roundDeleteConfirm?'Delete':'Save'}}</button></div>
  </section></div>
- <div v-if="confirm" class="fixed inset-0 z-[70] grid place-items-center bg-black/70 p-4"><section role="alertdialog" aria-modal="true" class="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 shadow-2xl"><h2 class="text-xl font-bold">Save result?</h2><p class="mt-3 text-[var(--muted)]">Confirm {{form.published?'publishing this result and awarding points':'saving this result as a draft'}}.</p><div class="mt-6 flex justify-end gap-3"><button type="button" aria-label="Cancel" class="rounded-xl border border-[var(--border)] px-4 py-2" @click="confirm=false">Cancel</button><button type="button" aria-label="Confirm save" :disabled="busy" class="rounded-xl bg-blue-600 px-4 py-2 text-white" @click="save">Confirm save</button></div></section></div>
+ <div v-if="publishConfirm" class="fixed inset-0 z-[80] grid place-items-center bg-black/70 p-4"><section role="alertdialog" aria-modal="true" aria-label="Publish round results" class="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 shadow-2xl"><h2 class="text-xl font-bold">Publish all round results?</h2><p class="mt-3 text-[var(--muted)]">This publishes all {{results.length}} results for {{selectedRound?.name}} and awards house points using the competition scoring scheme.</p><div class="mt-6 flex justify-end gap-3"><button type="button" class="rounded-lg border border-[var(--border)] px-4 py-2" @click="publishConfirm=false">Cancel</button><button type="button" class="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white" :disabled="publishing" @click="publishRound">Confirm publish</button></div></section></div>
+ <div v-if="confirm" class="fixed inset-0 z-[70] grid place-items-center bg-black/70 p-4"><section role="alertdialog" aria-modal="true" class="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 shadow-2xl"><h2 class="text-xl font-bold">Save result?</h2><p class="mt-3 text-[var(--muted)]">Confirm saving this result. Publish the whole round from Round Results once all participants have results.</p><div class="mt-6 flex justify-end gap-3"><button type="button" aria-label="Cancel" class="rounded-xl border border-[var(--border)] px-4 py-2" @click="confirm=false">Cancel</button><button type="button" aria-label="Confirm save" :disabled="busy" class="rounded-xl bg-blue-600 px-4 py-2 text-white" @click="save">Confirm save</button></div></section></div>
 </div>
 </template>
