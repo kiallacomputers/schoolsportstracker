@@ -18,6 +18,15 @@ const timeBased=computed(()=>definition.value?.measurement?.startsWith('time'))
 const format=(v:number)=>definition.value?.measurement==='distance_mm'?(v/1000).toFixed(3)+' m':definition.value?.measurement==='time_ms'?(v/1000).toFixed(3)+' s':String(v)
 const matching=computed(()=>candidates.value.filter(r=>r.competition_type===(recordScope.value==='ISR'?'inter_school':'intra_school')&&r.event_definition_id===selectedDefinition.value&&r.age_group===ageGroup.value&&r.division===division.value&&r.status==='valid'&&r.published_at&&r.performance_value>0))
 const improved=computed(()=>current.value?matching.value.filter(r=>timeBased.value?r.performance_value<current.value.performance_value:r.performance_value>current.value.performance_value).sort((a,b)=>timeBased.value?a.performance_value-b.performance_value:b.performance_value-a.performance_value):[])
+function downloadRecordCsvTemplate(){
+ const columns=['record_type','event','age_group','division','performance','holder_name','achieved_on','notes']
+ const csv=columns.join(',')+'\r\n'
+ const url=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'}))
+ const link=document.createElement('a')
+ link.href=url;link.download='sportstracker-school-records-template.csv'
+ document.body.appendChild(link);link.click();link.remove()
+ URL.revokeObjectURL(url)
+}
 function resetForm(){holder.value=current.value?.holder_name||'';value.value=String(current.value?.performance_value||'');achieved.value=current.value?.achieved_on||''}
 async function load(){
  if(!schoolId.value)return
@@ -56,7 +65,7 @@ watch([selectedDefinition,ageGroup,division,recordScope],resetForm)
 </script>
 <template>
 <div class="space-y-6">
- <UiPageHeader title="School Records" description="Maintain historical baselines; publishing results automatically updates verified records."/>
+ <UiPageHeader title="School Records" description="Maintain historical baselines; publishing results automatically updates verified records."/>\n <div class="flex flex-wrap items-center gap-3"><button type="button" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white" @click="downloadRecordCsvTemplate">Download blank CSV template</button><span class="text-sm text-[var(--muted)]">Use SR or ISR for record_type. Enter race times as M:SS:HH, dates as YYYY-MM-DD, and one record per row.</span></div>
  <p v-if="error" role="alert" class="rounded-lg bg-red-50 p-3 text-red-700">{{error}}</p>
  <p v-if="notice" role="status" class="text-green-600">{{notice}}</p>
  <UiPanel>
