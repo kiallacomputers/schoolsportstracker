@@ -57,6 +57,54 @@ async function removeSetup(){
  }catch(e:any){error.value=e.message||'Unable to remove group';setupDelete.value=false}
  finally{setupBusy.value=false}
 }
+type PresetKind='primary'|'secondary'|'custom'
+const presetKind=ref<PresetKind>('primary'),includeOptional=ref(false),includeYearLevels=ref(true),includeDivisions=ref(true),presetConfirm=ref(false),presetBusy=ref(false)
+const cutoffMode=ref('calendar_year'),cutoffDate=ref(''),cutoffConfirm=ref(false),cutoffBusy=ref(false)
+const presetPreview=computed(()=>{
+ const names:string[]=[]
+ if(presetKind.value==='primary'){
+  for(let n=8;n<=12;n++)names.push('Under '+n)
+  if(includeOptional.value)names.push('Under 13')
+  if(includeYearLevels.value)names.push('Prep',...Array.from({length:6},(_,i)=>'Year '+(i+1)))
+ }else if(presetKind.value==='secondary'){
+  for(let n=13;n<=18;n++)names.push('Under '+n)
+  if(includeOptional.value)names.push('Under 19','Open')
+  if(includeYearLevels.value)names.push(...Array.from({length:6},(_,i)=>'Year '+(i+7)))
+ }
+ return names
+})
+const presetDivisions=['Boys','Girls','Mixed','Open']
+async function applyPreset(){
+ const c=eventCompetition.value;if(!c||!canEdit(c)||presetBusy.value)return
+ presetBusy.value=true;error.value=''
+ try{
+  const current=new Set(ageGroups.value.map(g=>g.name.toLowerCase()))
+  const ages=presetPreview.value.filter(n=>!current.has(n.toLowerCase())).map(name=>({
+   competition_id:c.id,name,
+   min_age:null,
+   max_age:name.startsWith('Under ')?Number(name.slice(6))-1:null
+  }))
+  const currentDivisions=new Set(divisions.value.map(d=>d.name.toLowerCase()))
+  const divs=includeDivisions.value?presetDivisions.filter(name=>!currentDivisions.has(name.toLowerCase())).map(name=>({competition_id:c.id,name})):[]
+  if(ages.length){const {error:e}=await db.from('competition_age_groups').insert(ages);if(e)throw e}
+  if(divs.length){const {error:e}=await db.from('competition_divisions').insert(divs);if(e)throw e}
+  await loadGroups(c)
+  presetConfirm.value=false
+  notice.value=`Preset applied: ${ages.length} age groups and ${divs.length} divisions added. Existing entries kept.`
+ }catch(e:any){error.value=e.message||'Unable to apply preset';presetConfirm.value=false;await loadGroups(c).catch(()=>{})}
+ finally{presetBusy.value=false}
+}
+async function saveCutoff(){
+ const c=eventCompetition.value;if(!c||!canEdit(c)||cutoffBusy.value)return
+ cutoffBusy.value=true;error.value=''
+ try{
+  if(cutoffMode.value==='custom_date'&&!cutoffDate.value)throw new Error('Select an age cutoff date')
+  const {error:e}=await db.from('competitions').update({age_cutoff_mode:cutoffMode.value,age_cutoff_date:cutoffMode.value==='custom_date'?cutoffDate.value:null}).eq('id',c.id)
+  if(e)throw e
+  cutoffConfirm.value=false;notice.value='Age cutoff settings saved'
+ }catch(e:any){error.value=e.message||'Unable to save age cutoff';cutoffConfirm.value=false}
+ finally{cutoffBusy.value=false}
+}
 const definitions=ref<EventDefinition[]>([]),events=ref<CompetitionEvent[]>([])
 const eventCompetition=ref<Competition|null>(null),eventDialog=ref(false),eventConfirm=ref(false),eventDelete=ref(false),eventSelected=ref<CompetitionEvent|null>(null),eventBusy=ref(false),eventLoading=ref(false)
 const eventForm=reactive({event_definition_id:'',age_group:'',division:'',is_team:false,min_age:'',max_age:'',max_participants:''})
@@ -64,15 +112,16 @@ const availableDefinitions=computed(()=>definitions.value.filter(d=>d.sport_id==
 function eventName(id:string){return definitions.value.find(d=>d.id===id)?.name||'Unknown event'}
 function eventMeasurement(id:string){return definitions.value.find(d=>d.id===id)?.measurement||''}
 async function openEvents(c:Competition){
- eventCompetition.value=c;setupDialog.value=false;ageGroups.value=[];divisions.value=[];eventDialog.value=false;eventConfirm.value=false;eventDelete.value=false;eventSelected.value=null;events.value=[];error.value='';eventLoading.value=true
+ eventCompetition.value=c;presetConfirm.value=false;cutoffConfirm.value=false;setupDialog.value=false;ageGroups.value=[];divisions.value=[];eventDialog.value=false;eventConfirm.value=false;eventDelete.value=false;eventSelected.value=null;events.value=[];error.value='';eventLoading.value=true
  try{
   const [d,e]=await Promise.all([db.from('event_definitions').select('id,sport_id,name,measurement').eq('sport_id',c.sport_id||''),db.from('competition_events').select('id,competition_id,event_definition_id,age_group,division,is_team,min_age,max_age,max_participants').eq('competition_id',c.id)])
   if(d.error||e.error)throw d.error||e.error
-  definitions.value=d.data||[];events.value=e.data||[];await loadGroups(c)
+  definitions.value=d.data||[];events.value=e.data||[];await loadGroups(c);const {data:settings,error:settingsError}=await db.from('competitions').select('age_cutoff_mode,age_cutoff_date').eq('id',c.id).single();if(settingsError)throw settingsError;cutoffMode.value=settings?.age_cutoff_mode==='custom_date'?'custom_date':'calendar_year';cutoffDate.value=settings?.age_cutoff_date||''
  }catch(e:any){error.value=e.message||'Unable to load events'}
  finally{eventLoading.value=false}
 }
 function newEvent(){eventSelected.value=null;Object.assign(eventForm,{event_definition_id:availableDefinitions.value[0]?.id||'',age_group:'',division:'',is_team:false,min_age:'',max_age:'',max_participants:''});eventConfirm.value=false;eventDialog.value=true}
+function applyAgeGroup(){const g=ageGroups.value.find(g=>g.name===eventForm.age_group);if(g){eventForm.min_age=g.min_age===null?'':String(g.min_age);eventForm.max_age=g.max_age===null?'':String(g.max_age)}}
 function editEvent(e:CompetitionEvent){eventSelected.value=e;Object.assign(eventForm,{event_definition_id:e.event_definition_id,age_group:e.age_group||'',division:e.division||'',is_team:e.is_team,min_age:e.min_age?.toString()||'',max_age:e.max_age?.toString()||'',max_participants:e.max_participants?.toString()||''});eventConfirm.value=false;eventDialog.value=true}
 function requestEventSave(){if(!eventBusy.value)eventConfirm.value=true}
 async function saveEvent(){
@@ -199,6 +248,18 @@ watch(schoolId,()=>{confirmSave.value=false;dialog.value=false;void load()},{imm
     <button v-if="canEdit(eventCompetition)" aria-label="Add event" title="Add event" class="rounded-xl bg-blue-600 p-3 text-white" @click="newEvent"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
     <button aria-label="Close" title="Close" class="rounded-xl border border-[var(--border)] p-3 text-red-700" @click="eventCompetition=null"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
    </div></header>
+   <div v-if="canEdit(eventCompetition)" class="mb-5 rounded-xl border border-[var(--border)] p-4">
+    <h3 class="mb-3 font-semibold">Age-group presets</h3>
+    <div class="grid gap-3 sm:grid-cols-3">
+     <label class="text-sm font-semibold">Preset<select v-model="presetKind" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-2"><option value="primary">Primary school</option><option value="secondary">Secondary school</option><option value="custom">Custom (manual)</option></select></label>
+     <label class="flex items-center gap-2 text-sm"><input v-model="includeYearLevels" type="checkbox" :disabled="presetKind==='custom'"/> Include year levels</label>
+     <label class="flex items-center gap-2 text-sm"><input v-model="includeOptional" type="checkbox" :disabled="presetKind==='custom'"/> Include optional groups</label>
+    </div>
+    <label class="mt-3 flex items-center gap-2 text-sm"><input v-model="includeDivisions" type="checkbox" :disabled="presetKind==='custom'"/> Include Boys, Girls, Mixed and Open divisions</label>
+    <p class="mt-2 text-sm text-[var(--muted)]">{{presetKind==='custom'?'Create your own age groups and divisions below.':'Will add missing groups: '+presetPreview.join(', ')}}</p>
+    <div class="mt-3 flex justify-end"><button v-if="presetKind!=='custom'" aria-label="Apply age group preset" title="Apply age group preset" class="rounded-xl bg-blue-600 p-3 text-white" @click="presetConfirm=true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button></div>
+    <div class="mt-4 border-t border-[var(--border)] pt-4"><h3 class="mb-2 font-semibold">Age eligibility cutoff</h3><div class="flex flex-wrap items-end gap-3"><label class="text-sm font-semibold">Calculate age at<select v-model="cutoffMode" class="mt-1 block rounded-lg border border-[var(--border)] bg-[var(--panel)] p-2"><option value="calendar_year">31 December of competition year</option><option value="custom_date">Custom date</option></select></label><label v-if="cutoffMode==='custom_date'" class="text-sm font-semibold">Cutoff date<input v-model="cutoffDate" type="date" class="mt-1 block rounded-lg border border-[var(--border)] bg-[var(--panel)] p-2"/></label><button aria-label="Save age cutoff" title="Save age cutoff" class="rounded-xl bg-blue-600 p-3 text-white" @click="cutoffConfirm=true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5V3h11l5 5v13ZM7 21v-8h10v8"/></svg></button></div><p class="mt-2 text-xs text-[var(--muted)]">Age limits use the selected cutoff. Year-level groups are labels and do not automatically calculate student eligibility.</p></div>
+   </div>
    <div v-if="canEdit(eventCompetition)" class="mb-5 grid gap-4 sm:grid-cols-2">
     <div class="rounded-xl border border-[var(--border)] p-4"><div class="mb-2 flex items-center justify-between"><h3 class="font-semibold">Age groups</h3><button aria-label="Add age group" title="Add age group" class="rounded-lg bg-blue-600 p-2 text-white" @click="openSetup('age')">＋</button></div><p v-if="!ageGroups.length" class="text-sm text-[var(--muted)]">No saved age groups</p><div v-for="g in ageGroups" :key="g.id" class="flex items-center justify-between gap-2 py-1 text-sm"><span>{{g.name}} <span class="text-[var(--muted)]">{{g.min_age??'–'}}–{{g.max_age??'–'}}</span></span><div class="flex gap-2"><button :aria-label="'Edit '+g.name" title="Edit" class="text-blue-600" @click="openSetup('age',g)">✎</button><button :aria-label="'Delete '+g.name" title="Delete" class="text-red-700" @click="openSetup('age',g);setupDelete=true">▤</button></div></div></div>
     <div class="rounded-xl border border-[var(--border)] p-4"><div class="mb-2 flex items-center justify-between"><h3 class="font-semibold">Divisions</h3><button aria-label="Add division" title="Add division" class="rounded-lg bg-blue-600 p-2 text-white" @click="openSetup('division')">＋</button></div><p v-if="!divisions.length" class="text-sm text-[var(--muted)]">No saved divisions</p><div v-for="d in divisions" :key="d.id" class="flex items-center justify-between gap-2 py-1 text-sm"><span>{{d.name}}</span><div class="flex gap-2"><button :aria-label="'Edit '+d.name" title="Edit" class="text-blue-600" @click="openSetup('division',d)">✎</button><button :aria-label="'Delete '+d.name" title="Delete" class="text-red-700" @click="openSetup('division',d);setupDelete=true">▤</button></div></div></div>
@@ -212,7 +273,7 @@ watch(schoolId,()=>{confirmSave.value=false;dialog.value=false;void load()},{imm
    <h3 class="mb-4 text-lg font-bold">{{eventSelected?'Edit event':'Add event'}}</h3>
    <form class="space-y-4" @submit.prevent="requestEventSave">
     <label class="block text-sm font-semibold">Event definition<select v-model="eventForm.event_definition_id" required class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option disabled value="">Select event</option><option v-for="d in availableDefinitions" :key="d.id" :value="d.id">{{d.name}} ({{d.measurement}})</option></select></label>
-    <div class="grid grid-cols-2 gap-3"><label class="block text-sm font-semibold">Age group<select v-model="eventForm.age_group" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option value="">All ages</option><option v-if="eventForm.age_group&&!ageGroups.some(g=>g.name===eventForm.age_group)" :value="eventForm.age_group">{{eventForm.age_group}} (legacy)</option><option v-for="g in ageGroups" :key="g.id" :value="g.name">{{g.name}}</option></select></label><label class="block text-sm font-semibold">Division<select v-model="eventForm.division" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option value="">Open</option><option v-if="eventForm.division&&!divisions.some(d=>d.name===eventForm.division)" :value="eventForm.division">{{eventForm.division}} (legacy)</option><option v-for="d in divisions" :key="d.id" :value="d.name">{{d.name}}</option></select></label></div>
+    <div class="grid grid-cols-2 gap-3"><label class="block text-sm font-semibold">Age group<select v-model="eventForm.age_group" @change="applyAgeGroup" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option value="">All ages</option><option v-if="eventForm.age_group&&!ageGroups.some(g=>g.name===eventForm.age_group)" :value="eventForm.age_group">{{eventForm.age_group}} (legacy)</option><option v-for="g in ageGroups" :key="g.id" :value="g.name">{{g.name}}</option></select></label><label class="block text-sm font-semibold">Division<select v-model="eventForm.division" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option value="">Open</option><option v-if="eventForm.division&&!divisions.some(d=>d.name===eventForm.division)" :value="eventForm.division">{{eventForm.division}} (legacy)</option><option v-for="d in divisions" :key="d.id" :value="d.name">{{d.name}}</option></select></label></div>
     <div class="grid grid-cols-2 gap-3"><label class="block text-sm font-semibold">Minimum age<input v-model="eventForm.min_age" type="number" min="3" max="30" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label><label class="block text-sm font-semibold">Maximum age<input v-model="eventForm.max_age" type="number" min="3" max="30" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label></div>
     <label class="block text-sm font-semibold">Maximum participants<input v-model="eventForm.max_participants" type="number" min="1" max="10000" placeholder="Optional" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
     <label class="flex items-center gap-3 text-sm font-semibold"><input v-model="eventForm.is_team" type="checkbox" class="h-4 w-4"/>Team event</label>
@@ -224,6 +285,7 @@ watch(schoolId,()=>{confirmSave.value=false;dialog.value=false;void load()},{imm
 
  <div v-if="setupDialog" class="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"><section role="dialog" aria-modal="true" aria-label="Manage age group or division" class="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl"><h3 class="mb-4 text-lg font-bold">{{setupSelected?'Edit':'Add'}} {{setupKind==='age'?'age group':'division'}}</h3><form class="space-y-4" @submit.prevent="setupConfirm=true"><label class="block text-sm font-semibold">Name<input v-model="setupForm.name" required maxlength="80" placeholder="e.g. Under 14 or Girls" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label><div v-if="setupKind==='age'" class="grid grid-cols-2 gap-3"><label class="text-sm font-semibold">Minimum age<input v-model="setupForm.min_age" type="number" min="3" max="30" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label><label class="text-sm font-semibold">Maximum age<input v-model="setupForm.max_age" type="number" min="3" max="30" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label></div><div class="flex justify-end gap-3"><button type="button" aria-label="Cancel" title="Cancel" class="rounded-xl border border-[var(--border)] p-3 text-red-700" @click="setupDialog=false">✕</button><button type="submit" aria-label="Save" title="Save" class="rounded-xl bg-blue-600 p-3 text-white">▣</button></div></form></section></div>
  <div v-if="setupConfirm||setupDelete" class="fixed inset-0 z-[70] grid place-items-center bg-black/75 p-4"><section role="alertdialog" aria-modal="true" class="w-full max-w-sm rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl"><h3 class="text-lg font-bold">{{setupDelete?'Delete this item?':'Save changes?'}}</h3><p class="mt-3 text-sm">Are you sure you want to {{setupDelete?'delete':'save'}} this {{setupKind==='age'?'age group':'division'}}?</p><div class="mt-5 flex justify-end gap-3"><button :disabled="setupBusy" aria-label="Cancel" title="Cancel" class="rounded-xl border border-[var(--border)] p-3 text-red-700" @click="setupConfirm=false;setupDelete=false">✕</button><button :disabled="setupBusy" aria-label="Confirm" title="Confirm" class="rounded-xl bg-blue-600 p-3 text-white" @click="setupDelete?removeSetup():saveSetup()">{{setupDelete?'▤':'▣'}}</button></div></section></div>
+ <div v-if="presetConfirm||cutoffConfirm" class="fixed inset-0 z-[70] grid place-items-center bg-black/75 p-4"><section role="alertdialog" aria-modal="true" class="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl"><h3 class="text-lg font-bold">{{presetConfirm?'Apply age-group preset?':'Save age cutoff?'}}</h3><p class="mt-3 text-sm">{{presetConfirm?'Add missing age groups and selected divisions? Existing entries and events will not be deleted.':'Are you sure you want to update the competition age cutoff settings?'}}</p><div class="mt-5 flex justify-end gap-3"><button :disabled="presetBusy||cutoffBusy" aria-label="Cancel" title="Cancel" class="rounded-xl border border-[var(--border)] p-3 text-red-700" @click="presetConfirm=false;cutoffConfirm=false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button><button :disabled="presetBusy||cutoffBusy" aria-label="Confirm" title="Confirm" class="rounded-xl bg-blue-600 p-3 text-white" @click="presetConfirm?applyPreset():saveCutoff()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></button></div></section></div>
 
 </div>
 </template>
