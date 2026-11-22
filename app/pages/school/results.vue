@@ -22,13 +22,13 @@ async function loadRecordBaselines(){
  recordBaselines.value=data||[]
 }
 function resultRecordStatus(r:any,scope:string){
- if(r.placing_position!==1||r.status!=='valid'||r.performance_value==null)return ''
+ if((scope==='SR'&&r.placing_position!==1)||r.status!=='valid'||r.performance_value==null)return ''
  const b=recordBaselines.value.find(x=>x.record_scope===scope)
  if(!b||b.performance_value==null)return ''
  if(b.source_result_id===r.id)return scope==='SR'?'Confirmed SR':'Recorded ISR'
  const time=/^(time|duration)/i.test(String(selectedEvent.value?.event_definitions?.measurement||''))
  const n=Number(r.performance_value),v=Number(b.performance_value)
- if(time?n<v:n>v)return scope==='ISR'?'ISR-standard (verify)':'Exceeds SR benchmark (verify)'
+ if(time?n<v:n>v)return scope==='ISR'?'ISR Standard':'Potential SR'
  if(n===v)return 'Equals '+scope+' benchmark'
  return ''
 }
@@ -102,7 +102,7 @@ watch(schoolId,loadCompetitions,{immediate:true})
   <UiPanel>
    <h2 class="mb-3 text-xl font-bold">Published results</h2>
    <p class="mb-3 text-sm text-[var(--muted)]">{{selectedEvent?eventName(selectedEvent):'Select an event'}}{{selectedRound?' · '+selectedRound.name:''}} · {{publishedCount}} published</p>
-   <p v-if="recordError" role="alert" class="mb-2 text-xs text-red-600">{{recordError}}</p><p class="mb-2 text-xs text-[var(--muted)]">Only first-place results (including ties) show SR and ISR comparisons against saved event, age group and division benchmarks. ISR-standard performances outside interschool events require official verification.</p><p v-if="busy" class="text-sm text-[var(--muted)]">Loading results…</p>
+   <p v-if="recordError" role="alert" class="mb-2 text-xs text-red-600">{{recordError}}</p><p class="mb-2 text-xs text-[var(--muted)]">Potential SR is shown for first place (including ties); ISR Standard is shown for every qualifying performance, regardless of placing. ISR-standard performances outside interschool events require official verification.</p><p v-if="busy" class="text-sm text-[var(--muted)]">Loading results…</p>
    <p v-else-if="!publishedResults.length" class="text-sm text-[var(--muted)]">No published results for this round. Publish results from Event Day to display them here.</p>
    <div v-for="r in publishedResults" :key="r.id" class="flex items-center justify-between gap-3 border-b border-[var(--border)] py-3">
     <div><strong>{{r.placing_position?'#'+r.placing_position:'—'}} · {{entryName(r.entry_id)}} <span v-if="r.placing_position===1&&r.record_badge" class="ml-2 inline-flex rounded-md border px-2 py-0.5 text-xs font-extrabold tracking-wide" :class="r.record_badge==='SR'?'border-[#8C6500] bg-[#C99700] text-[#1F1700] shadow-sm':'border-violet-400 bg-violet-100 text-violet-900'" :title="r.record_badge==='SR'?'School Record':'Inter-School Record'">{{r.record_badge}}</span></strong><p class="text-xs text-[var(--muted)]">House: {{houseName(entries.find(e=>e.id===r.entry_id)?.house_id)}} · {{performance(r)}}</p><div class="mt-1 flex flex-wrap gap-1"><template v-for="scope in ['SR','ISR']" :key="scope"><span v-if="resultRecordStatus(r,scope)" class="rounded px-2 py-0.5 text-xs font-semibold" :class="scope==='SR'?'bg-amber-100 text-amber-900':'bg-violet-100 text-violet-900'">{{resultRecordStatus(r,scope)}}</span></template></div></div>
