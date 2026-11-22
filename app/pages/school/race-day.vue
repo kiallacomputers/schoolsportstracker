@@ -180,8 +180,14 @@ async function deleteRound(){
  }catch(e:any){error.value=e.message||'Unable to delete round'}
  finally{roundBusy.value=false}
 }
-const form=reactive({entry_id:'',placing_position:'',performance_value:'',status:'valid',published:false})
+const form=reactive({entry_id:'',performance_value:'',status:'valid',published:false})
 const selectedEvent=computed(()=>events.value.find(e=>e.id===eventId.value))
+const lowerIsBetter=computed(()=>/^(time|duration)/i.test(String(selectedEvent.value?.event_definitions?.measurement||'')))
+const placingPreview=computed(()=>{
+ if(form.status!=='valid'||!/^\d+$/.test(form.performance_value))return null
+ const value=Number(form.performance_value)
+ return 1+results.value.filter(r=>r.entry_id!==form.entry_id&&r.status==='valid'&&r.performance_value!=null&&(lowerIsBetter.value?Number(r.performance_value)<value:Number(r.performance_value)>value)).length
+})
 const selectedRound=computed(()=>rounds.value.find(r=>r.id===roundId.value))
 const selectedResult=computed(()=>results.value.find(r=>r.entry_id===form.entry_id))
 const houseName=(id:string)=>houses.value.find(h=>h.id===id)?.name||'Unassigned'
@@ -210,7 +216,7 @@ async function loadEvents(){
  loading.value=true;error.value=''
  try{
   const [e,t]=await Promise.all([
-   query('competition_events','id,competition_id,age_group,division,is_team,min_age,max_age,max_participants,event_definitions(name)','competition_id',competitionId.value),
+   query('competition_events','id,competition_id,age_group,division,is_team,min_age,max_age,max_participants,event_definitions(name,measurement)','competition_id',competitionId.value),
    query('competition_house_totals','competition_id,school_id,house_id,total_points,scored_results','competition_id',competitionId.value)
   ])
   events.value=e;totals.value=t.filter((v:any)=>v.school_id===schoolId.value)
@@ -241,14 +247,12 @@ const unrecordedEntries=computed(()=>entries.value.filter(e=>!results.value.some
 function editEntry(entry:any){
  if(!entry)return
  const result=results.value.find(r=>r.entry_id===entry.id)
- Object.assign(form,{entry_id:entry.id,placing_position:result?.placing_position==null?'':String(result.placing_position),performance_value:result?.performance_value==null?'':String(result.performance_value),status:result?.status||'valid',published:!!result?.published_at})
+ Object.assign(form,{entry_id:entry.id,performance_value:result?.performance_value==null?'':String(result.performance_value),status:result?.status||'valid',published:!!result?.published_at})
  notice.value='';error.value=''
 }
 function validate(){
  if(!roundId.value||!form.entry_id)throw new Error('Select a round and participant')
  if(form.status==='valid'&&(!form.performance_value||!/^\d+$/.test(form.performance_value)))throw new Error('Valid results require a whole-number performance value in the event measurement unit')
- if(form.placing_position!==''&&(!Number.isInteger(Number(form.placing_position))||Number(form.placing_position)<1))throw new Error('Placing must be a positive whole number')
- if(form.published&&form.placing_position==='')throw new Error('Set a placing before publishing')
 }
 function askSave(){try{validate();error.value='';confirm.value=true}catch(e:any){error.value=e.message}}
 async function save(){
@@ -256,10 +260,21 @@ async function save(){
  busy.value=true;confirm.value=false;error.value=''
  try{
   validate()
-  const payload:any={round_id:roundId.value,entry_id:form.entry_id,status:form.status,placing_position:form.placing_position===''?null:Number(form.placing_position),performance_value:form.performance_value===''?null:Number(form.performance_value),published_at:form.published?(selectedResult.value?.published_at||new Date().toISOString()):null}
+  const payload:any={round_id:roundId.value,entry_id:form.entry_id,status:form.status,placing_position:form.status==='valid'?placingPreview.value:null,performance_value:form.performance_value===''?null:Number(form.performance_value),published_at:form.published?(selectedResult.value?.published_at||new Date().toISOString()):null}
   const old=selectedResult.value
   const r=old?await db.from('event_results').update(payload).eq('id',old.id):await db.from('event_results').insert(payload)
   if(r.error)throw r.error
+  await loadResults()
+  const ranked=results.value.filter(r=>r.status==='valid'&&r.performance_value!=null)
+  for(const result of results.value){
+   const position=result.status==='valid'&&result.performance_value!=null
+    ?1+ranked.filter(v=>lowerIsBetter.value?Number(v.performance_value)<Number(result.performance_value):Number(v.performance_value)>Number(result.performance_value)).length
+    :null
+   if(result.placing_position!==position){
+    const {error:rankError}=await db.from('event_results').update({placing_position:position}).eq('id',result.id)
+    if(rankError)throw rankError
+   }
+  }
   await loadResults()
   const {data,error:e}=await db.from('competition_house_totals').select('competition_id,school_id,house_id,total_points,scored_results').eq('competition_id',competitionId.value)
   if(e)throw e
@@ -299,7 +314,7 @@ watch(schoolId,loadCompetitions,{immediate:true})
    <p v-if="!entries.length" class="text-[var(--muted)]">No participants are registered for this event yet.</p>
    <form v-else class="space-y-4" @submit.prevent="askSave">
     <label class="block font-semibold">Participant / team<select v-model="form.entry_id" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" required @change="editEntry(entries.find(e=>e.id===form.entry_id))"><option value="">Select participant</option><option v-for="e in unrecordedEntries" :key="e.id" :value="e.id">{{entryName(e)}} — {{houseName(e.house_id)}}</option><option v-if="form.entry_id && !unrecordedEntries.some(e=>e.id===form.entry_id)" :value="form.entry_id">{{entryName(entries.find(e=>e.id===form.entry_id))}} — editing saved result</option></select></label>
-    <label class="block font-semibold">Placing<input v-model="form.placing_position" type="number" min="1" step="1" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
+    <p class="text-sm font-semibold">Automatic placing: {{placingPreview===null?'Enter a valid performance':'#'+placingPreview}} <span class="font-normal text-[var(--muted)]">(recalculated for the whole round after saving)</span></p>
     <label class="block font-semibold">Performance (stored measurement value)<input v-model="form.performance_value" type="number" min="0" step="1" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
     <label class="block font-semibold">Status<select v-model="form.status" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option value="valid">Valid</option><option value="dns">Did not start</option><option value="dnf">Did not finish</option><option value="dq">Disqualified</option></select></label>
     <label class="flex items-center gap-3"><input v-model="form.published" type="checkbox" class="h-5 w-5"/> Publish result and award points</label>
