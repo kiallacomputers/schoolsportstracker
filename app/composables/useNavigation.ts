@@ -11,6 +11,7 @@ export function useNavigation() {
       {label:'Registrations',to:'/school/entries'+suffix},
       {label:'Event Day',to:'/school/race-day'+suffix},
       {label:'Results',to:'/school/results'+suffix},
+      {label:'School Records',to:'/school/records'+suffix},
       ...(platformAdmin.value||schoolRole.value==='school_admin'?[{label:'Year Rollover',to:'/school/rollover'+suffix},{label:'Access Scopes',to:'/school/access-scopes'+suffix}]:[])
     ]:[]
     return [{label:'Overview',to:'/dashboard'},...admin,...school,...(platformAdmin.value?[{label:'Issues & New Features',to:'/admin/issues'}]:[])]
