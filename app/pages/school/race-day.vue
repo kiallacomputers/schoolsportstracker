@@ -5,6 +5,81 @@ const {schoolId}=useSchool()
 const competitions=ref<any[]>([]),events=ref<any[]>([]),rounds=ref<any[]>([]),entries=ref<any[]>([]),results=ref<any[]>([]),houses=ref<any[]>([]),totals=ref<any[]>([])
 const competitionId=ref(''),eventId=ref(''),roundId=ref('')
 const loading=ref(false),busy=ref(false),error=ref(''),notice=ref(''),confirm=ref(false)
+const students=ref<any[]>([]),participants=ref<any[]>([]),entryDialog=ref(false),entryConfirm=ref(false),entryBusy=ref(false),entryStudentId=ref(''),entryTeamName=ref(''),entryTeamStudents=ref<string[]>([]),entryDeleteConfirm=ref(false),editingEntry=ref<any|null>(null)
+const studentName=(id:string)=>{const s=students.value.find(v=>v.id===id);return s?[s.given_name,s.family_name].filter(Boolean).join(' '):'Unknown student'}
+const entryMembers=(id:string)=>participants.value.filter(p=>p.entry_id===id).sort((a,b)=>(a.leg_order||0)-(b.leg_order||0)).map(p=>studentName(p.student_id))
+const entryName=(e:any)=>e?(e.team_name||entryMembers(e.id).join(', ')||'Entry '+e.id.slice(0,8)):'Unknown entry'
+const availableStudents=computed(()=>students.value.filter(s=>!entries.value.some(e=>participants.value.some(p=>p.entry_id===e.id&&p.student_id===s.id&&e.id!==editingEntry.value?.id))))
+async function loadStudents(){
+ students.value=[]
+ if(!schoolId.value||!competitionId.value)return
+ const competition=competitions.value.find(c=>c.id===competitionId.value)
+ const year=competition?.school_year||new Date().getFullYear()
+ const {data,error:e}=await db.from('student_enrolments').select('student_id,house_id,students(id,given_name,family_name,is_active)').eq('school_id',schoolId.value).eq('school_year',year)
+ if(e)throw e
+ students.value=(data||[]).filter((v:any)=>v.students?.is_active).map((v:any)=>({...v.students,house_id:v.house_id})).sort((a:any,b:any)=>a.family_name.localeCompare(b.family_name))
+}
+async function loadParticipants(){
+ participants.value=[]
+ if(!entries.value.length)return
+ const {data,error:e}=await db.from('entry_participants').select('entry_id,student_id,leg_order').in('entry_id',entries.value.map(e=>e.id))
+ if(e)throw e
+ participants.value=data||[]
+}
+function openEntry(entry:any=null){
+ editingEntry.value=entry
+ entryStudentId.value=entry&&!selectedEvent.value?.is_team?entryMembers(entry.id).length?participants.value.find(p=>p.entry_id===entry.id)?.student_id||'':'':''
+ entryTeamStudents.value=entry?participants.value.filter(p=>p.entry_id===entry.id).sort((a,b)=>(a.leg_order||0)-(b.leg_order||0)).map(p=>p.student_id):[]
+ entryTeamName.value=entry?.team_name||''
+ entryConfirm.value=false;entryDeleteConfirm.value=false;entryDialog.value=true;error.value=''
+}
+function askEntrySave(){
+ if(selectedEvent.value?.is_team){
+  if(!entryTeamName.value.trim()||!entryTeamStudents.value.length){error.value='Enter a team name and select at least one student';return}
+ }else if(!entryStudentId.value){error.value='Select a student';return}
+ error.value='';entryConfirm.value=true
+}
+async function saveEntry(){
+ if(entryBusy.value||!eventId.value)return
+ entryBusy.value=true;entryConfirm.value=false;error.value=''
+ try{
+  const ids=selectedEvent.value?.is_team?entryTeamStudents.value:[entryStudentId.value]
+  if(!ids.length||ids.some(id=>!students.value.some(s=>s.id===id)))throw new Error('Select valid enrolled students')
+  if(new Set(ids).size!==ids.length)throw new Error('Duplicate student in team')
+  const assigned=students.value.filter(s=>ids.includes(s.id))
+  const houseIds=[...new Set(assigned.map(s=>s.house_id))]
+  if(houseIds.length!==1||!houseIds[0])throw new Error('All participants must be assigned to the same house')
+  if(entries.value.some(e=>e.id!==editingEntry.value?.id&&participants.value.some(p=>p.entry_id===e.id&&ids.includes(p.student_id))))throw new Error('A student is already registered for this event')
+  const payload={competition_event_id:eventId.value,school_id:schoolId.value,house_id:houseIds[0],team_name:selectedEvent.value?.is_team?entryTeamName.value.trim():null}
+  let id=editingEntry.value?.id
+  if(id){
+   const {error:e}=await db.from('event_entries').update(payload).eq('id',id)
+   if(e)throw e
+   const {error:de}=await db.from('entry_participants').delete().eq('entry_id',id)
+   if(de)throw de
+  }else{
+   const {data,error:e}=await db.from('event_entries').insert(payload).select('id').single()
+   if(e)throw e
+   id=data.id
+  }
+  const {error:pe}=await db.from('entry_participants').insert(ids.map((student_id,i)=>({entry_id:id,student_id,leg_order:i+1})))
+  if(pe)throw pe
+  entryDialog.value=false;await loadRounds();notice.value='Participant registration saved'
+ }catch(e:any){error.value=e.message||'Unable to save participant registration'}
+ finally{entryBusy.value=false}
+}
+async function deleteEntry(){
+ if(!editingEntry.value||entryBusy.value)return
+ entryBusy.value=true;entryDeleteConfirm.value=false;error.value=''
+ try{
+  const {count,error:e}=await db.from('event_results').select('id',{count:'exact',head:true}).eq('entry_id',editingEntry.value.id)
+  if(e)throw e
+  if(count)throw new Error('This entry has results. Remove those results before deleting the registration.')
+  const {error:de}=await db.from('event_entries').delete().eq('id',editingEntry.value.id)
+  if(de)throw de
+  entryDialog.value=false;await loadRounds();notice.value='Registration deleted'
+ }catch(e:any){error.value=e.message||'Unable to delete registration'}finally{entryBusy.value=false}
+}
 const roundDialog=ref(false),roundConfirm=ref(false),roundDeleteConfirm=ref(false),roundBusy=ref(false)
 const editingRound=ref<any|null>(null)
 const roundForm=reactive({name:'',round_order:'1'})
@@ -84,6 +159,7 @@ async function loadEvents(){
    query('competition_house_totals','competition_id,school_id,house_id,total_points,scored_results','competition_id',competitionId.value)
   ])
   events.value=e;totals.value=t.filter((v:any)=>v.school_id===schoolId.value)
+  await loadStudents()
  }catch(e:any){error.value=e.message||'Unable to load events'}finally{loading.value=false}
 }
 async function loadRounds(){
@@ -97,6 +173,7 @@ async function loadRounds(){
   ])
   rounds.value=r.sort((a:any,b:any)=>(a.round_order||0)-(b.round_order||0))
   entries.value=en.filter((v:any)=>v.school_id===schoolId.value)
+  await loadParticipants()
  }catch(e:any){error.value=e.message||'Unable to load rounds'}finally{loading.value=false}
 }
 async function loadResults(){
@@ -154,12 +231,17 @@ watch(schoolId,loadCompetitions,{immediate:true})
   </div>
   <p v-if="!loading&&eventId&&!rounds.length" class="mt-4 text-sm text-[var(--muted)]">No rounds yet. Create a Final for a single-round event, or add Heat 1, Heat 2 and Final separately.</p>
  </UiPanel>
+ <UiPanel v-if="eventId">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 class="text-xl font-bold">Event registrations ({{entries.length}})</h2><button type="button" aria-label="Register participant" class="rounded-lg bg-blue-600 px-4 py-2 text-white" @click="openEntry()">+ Register {{selectedEvent?.is_team?'team':'student'}}</button></div>
+  <p v-if="!entries.length" class="text-sm text-[var(--muted)]">No participants registered. Register students or teams to enter results.</p>
+  <div v-for="e in entries" :key="e.id" class="flex items-center justify-between gap-3 border-b border-[var(--border)] py-3"><div><strong>{{entryName(e)}}</strong><p class="text-xs text-[var(--muted)]">{{houseName(e.house_id)}}<span v-if="selectedEvent?.is_team"> · {{entryMembers(e.id).join(', ')}}</span></p></div><button type="button" :aria-label="'Edit registration '+entryName(e)" class="rounded-lg border border-[var(--border)] px-3 py-2 text-blue-500" @click="openEntry(e)">✎</button></div>
+ </UiPanel>
  <div v-if="roundId" class="grid gap-6 lg:grid-cols-2">
   <UiPanel>
    <h2 class="mb-4 text-xl font-bold">Record a result</h2>
    <p v-if="!entries.length" class="text-[var(--muted)]">No participants are registered for this event yet.</p>
    <form v-else class="space-y-4" @submit.prevent="askSave">
-    <label class="block font-semibold">Participant / team<select v-model="form.entry_id" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" required @change="editEntry(entries.find(e=>e.id===form.entry_id))"><option value="">Select participant</option><option v-for="e in entries" :key="e.id" :value="e.id">{{e.team_name||'Entry '+e.id.slice(0,8)}} — {{houseName(e.house_id)}}</option></select></label>
+    <label class="block font-semibold">Participant / team<select v-model="form.entry_id" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" required @change="editEntry(entries.find(e=>e.id===form.entry_id))"><option value="">Select participant</option><option v-for="e in entries" :key="e.id" :value="e.id">{{entryName(e)}} — {{houseName(e.house_id)}}</option></select></label>
     <label class="block font-semibold">Placing<input v-model="form.placing_position" type="number" min="1" step="1" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
     <label class="block font-semibold">Performance (stored measurement value)<input v-model="form.performance_value" type="number" min="0" step="1" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
     <label class="block font-semibold">Status<select v-model="form.status" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option value="valid">Valid</option><option value="dns">Did not start</option><option value="dnf">Did not finish</option><option value="dq">Disqualified</option></select></label>
@@ -167,9 +249,20 @@ watch(schoolId,loadCompetitions,{immediate:true})
     <div class="flex justify-end"><button type="submit" aria-label="Save result" class="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white" :disabled="busy">Save result</button></div>
    </form>
   </UiPanel>
-  <UiPanel><h2 class="mb-4 text-xl font-bold">Round results</h2><div v-if="!results.length" class="text-[var(--muted)]">No results recorded.</div><div v-for="r in results" :key="r.id" class="flex items-center justify-between gap-3 border-b border-[var(--border)] py-3"><div><strong>{{r.placing_position||'—'}} · {{entries.find(e=>e.id===r.entry_id)?.team_name||'Entry '+r.entry_id.slice(0,8)}}</strong><p class="text-xs text-[var(--muted)]">{{r.published_at?'Published':'Draft'}} · {{r.status}}</p></div><div class="flex items-center gap-3"><strong>{{r.points||0}} pts</strong><button type="button" :aria-label="'Edit result for '+r.entry_id" class="rounded-lg border border-[var(--border)] px-3 py-2 text-blue-500" @click="editEntry(entries.find(e=>e.id===r.entry_id))">✎</button></div></div></UiPanel>
+  <UiPanel><h2 class="mb-4 text-xl font-bold">Round results</h2><div v-if="!results.length" class="text-[var(--muted)]">No results recorded.</div><div v-for="r in results" :key="r.id" class="flex items-center justify-between gap-3 border-b border-[var(--border)] py-3"><div><strong>{{r.placing_position||'—'}} · {{entryName(entries.find(e=>e.id===r.entry_id))}}</strong><p class="text-xs text-[var(--muted)]">{{r.published_at?'Published':'Draft'}} · {{r.status}}</p></div><div class="flex items-center gap-3"><strong>{{r.points||0}} pts</strong><button type="button" :aria-label="'Edit result for '+r.entry_id" class="rounded-lg border border-[var(--border)] px-3 py-2 text-blue-500" @click="editEntry(entries.find(e=>e.id===r.entry_id))">✎</button></div></div></UiPanel>
  </div>
  <UiPanel v-if="competitionId"><h2 class="mb-4 text-xl font-bold">House leaderboard</h2><p v-if="!orderedTotals.length" class="text-[var(--muted)]">House points will appear when valid results are published.</p><div v-for="(t,i) in orderedTotals" :key="t.house_id" class="flex items-center justify-between border-b border-[var(--border)] py-3"><div class="flex items-center gap-3"><strong>{{i+1}}</strong><span class="h-4 w-4 rounded-full" :style="{background:houses.find(h=>h.id===t.house_id)?.colour||'#64748b'}"/><span>{{houseName(t.house_id)}}</span></div><strong>{{t.total_points}} points</strong></div></UiPanel>
+ <div v-if="entryDialog" class="fixed inset-0 z-[65] grid place-items-center bg-black/65 p-4"><section role="dialog" aria-modal="true" aria-label="Participant registration" class="w-full max-w-lg rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl">
+  <h2 class="mb-4 text-xl font-bold">{{editingEntry?'Edit':'Register'}} {{selectedEvent?.is_team?'team':'student'}}</h2>
+  <form class="space-y-4" @submit.prevent="askEntrySave">
+   <template v-if="selectedEvent?.is_team"><label class="block font-semibold">Team name<input v-model="entryTeamName" required maxlength="100" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
+    <p class="text-sm text-[var(--muted)]">Select students from the same house.</p><div class="max-h-56 space-y-2 overflow-auto rounded-lg border border-[var(--border)] p-3"><label v-for="s in availableStudents" :key="s.id" class="flex items-center gap-3"><input v-model="entryTeamStudents" type="checkbox" :value="s.id"/>{{studentName(s.id)}} · {{houseName(s.house_id)}}</label></div>
+   </template>
+   <label v-else class="block font-semibold">Student<select v-model="entryStudentId" required class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option value="">Select student</option><option v-for="s in availableStudents" :key="s.id" :value="s.id">{{studentName(s.id)}} · {{houseName(s.house_id)}}</option></select></label>
+   <div class="flex justify-between gap-3"><button v-if="editingEntry" type="button" aria-label="Delete registration" class="rounded-lg border border-red-500 px-3 py-2 text-red-500" @click="entryDeleteConfirm=true">Delete</button><span v-else/><div class="flex gap-2"><button type="button" aria-label="Cancel registration" class="rounded-lg border border-[var(--border)] px-4 py-2" @click="entryDialog=false">Cancel</button><button type="submit" aria-label="Save registration" :disabled="entryBusy" class="rounded-lg bg-blue-600 px-4 py-2 text-white">Save</button></div></div>
+  </form>
+ </section></div>
+ <div v-if="entryConfirm||entryDeleteConfirm" class="fixed inset-0 z-[80] grid place-items-center bg-black/70 p-4"><section role="alertdialog" aria-modal="true" class="w-full max-w-sm rounded-2xl bg-[var(--surface)] p-6 shadow-2xl"><h2 class="text-xl font-bold">{{entryDeleteConfirm?'Delete registration?':'Save registration?'}}</h2><p class="mt-3 text-[var(--muted)]">{{entryDeleteConfirm?'This will remove the entry and its participants.':'Confirm this event registration.'}}</p><div class="mt-6 flex justify-end gap-3"><button type="button" aria-label="Cancel confirmation" class="rounded-lg border border-[var(--border)] px-4 py-2" @click="entryConfirm=false;entryDeleteConfirm=false">Cancel</button><button type="button" :aria-label="entryDeleteConfirm?'Confirm delete registration':'Confirm save registration'" :disabled="entryBusy" class="rounded-lg px-4 py-2 text-white" :class="entryDeleteConfirm?'bg-red-600':'bg-blue-600'" @click="entryDeleteConfirm?deleteEntry():saveEntry()">{{entryDeleteConfirm?'Delete':'Save'}}</button></div></section></div>
  <div v-if="roundDialog" class="fixed inset-0 z-[65] grid place-items-center bg-black/65 p-4"><section role="dialog" aria-modal="true" aria-label="Round settings" class="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl">
   <h2 class="mb-4 text-xl font-bold">{{editingRound?'Edit round':'Add round'}}</h2>
   <form class="space-y-4" @submit.prevent="requestRoundSave">
