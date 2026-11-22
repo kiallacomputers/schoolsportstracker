@@ -5,6 +5,51 @@ const {schoolId}=useSchool()
 const competitions=ref<any[]>([]),events=ref<any[]>([]),rounds=ref<any[]>([]),entries=ref<any[]>([]),results=ref<any[]>([]),houses=ref<any[]>([]),totals=ref<any[]>([])
 const competitionId=ref(''),eventId=ref(''),roundId=ref('')
 const loading=ref(false),busy=ref(false),error=ref(''),notice=ref(''),confirm=ref(false)
+const roundDialog=ref(false),roundConfirm=ref(false),roundDeleteConfirm=ref(false),roundBusy=ref(false)
+const editingRound=ref<any|null>(null)
+const roundForm=reactive({name:'',round_order:'1'})
+function openRound(r:any=null){
+ editingRound.value=r
+ roundForm.name=r?.name||'Final'
+ roundForm.round_order=String(r?.round_order??(rounds.value.length+1))
+ roundConfirm.value=false;roundDeleteConfirm.value=false;roundDialog.value=true;error.value=''
+}
+function requestRoundSave(){
+ if(!roundForm.name.trim()||roundForm.name.trim().length>80){error.value='Round name must be 1 to 80 characters';return}
+ if(!Number.isInteger(Number(roundForm.round_order))||Number(roundForm.round_order)<1){error.value='Round order must be a positive whole number';return}
+ error.value='';roundConfirm.value=true
+}
+async function saveRound(){
+ if(!eventId.value||roundBusy.value)return
+ roundBusy.value=true;roundConfirm.value=false;error.value=''
+ try{
+  const payload={name:roundForm.name.trim(),round_order:Number(roundForm.round_order)}
+  const r=editingRound.value
+   ?await db.from('event_rounds').update(payload).eq('id',editingRound.value.id).eq('competition_event_id',eventId.value).select('id').single()
+   :await db.from('event_rounds').insert({...payload,competition_event_id:eventId.value}).select('id').single()
+  if(r.error)throw r.error
+  const savedId=r.data.id
+  roundDialog.value=false
+  await loadRounds()
+  roundId.value=savedId
+  await loadResults()
+  notice.value=editingRound.value?'Round updated':'Round created'
+ }catch(e:any){error.value=e.message||'Unable to save round'}
+ finally{roundBusy.value=false}
+}
+async function deleteRound(){
+ if(!editingRound.value||roundBusy.value)return
+ roundBusy.value=true;roundDeleteConfirm.value=false;error.value=''
+ try{
+  const {count,error:countError}=await db.from('event_results').select('id',{count:'exact',head:true}).eq('round_id',editingRound.value.id)
+  if(countError)throw countError
+  if(count){throw new Error('This round has recorded results. Remove or relocate those results before deleting the round.')}
+  const {error:e}=await db.from('event_rounds').delete().eq('id',editingRound.value.id).eq('competition_event_id',eventId.value)
+  if(e)throw e
+  roundDialog.value=false;await loadRounds();notice.value='Round deleted'
+ }catch(e:any){error.value=e.message||'Unable to delete round'}
+ finally{roundBusy.value=false}
+}
 const form=reactive({entry_id:'',placing_position:'',performance_value:'',status:'valid',published:false})
 const selectedEvent=computed(()=>events.value.find(e=>e.id===eventId.value))
 const selectedRound=computed(()=>rounds.value.find(r=>r.id===roundId.value))
@@ -102,7 +147,12 @@ watch(schoolId,loadCompetitions,{immediate:true})
    <label class="block font-semibold">Round<select v-model="roundId" :disabled="!eventId" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" @change="loadResults"><option value="">Choose round</option><option v-for="r in rounds" :key="r.id" :value="r.id">{{r.name}}</option></select></label>
   </div>
   <p v-if="loading" class="mt-4 text-sm text-[var(--muted)]">Loading…</p>
-  <p v-else-if="eventId&&!rounds.length" class="mt-4 text-sm text-[var(--muted)]">No rounds have been created for this event yet.</p>
+  <div v-if="eventId" class="mt-4 flex flex-wrap items-center gap-2">
+   <button type="button" aria-label="Add round" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white" @click="openRound()">+ Add round</button>
+   <button v-if="!rounds.length" type="button" aria-label="Create final round" class="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold" @click="openRound()">Create single Final</button>
+   <button v-if="selectedRound" type="button" aria-label="Edit selected round" class="rounded-lg border border-[var(--border)] px-3 py-2 text-blue-500" @click="openRound(selectedRound)">✎ Edit round</button>
+  </div>
+  <p v-if="!loading&&eventId&&!rounds.length" class="mt-4 text-sm text-[var(--muted)]">No rounds yet. Create a Final for a single-round event, or add Heat 1, Heat 2 and Final separately.</p>
  </UiPanel>
  <div v-if="roundId" class="grid gap-6 lg:grid-cols-2">
   <UiPanel>
@@ -120,6 +170,23 @@ watch(schoolId,loadCompetitions,{immediate:true})
   <UiPanel><h2 class="mb-4 text-xl font-bold">Round results</h2><div v-if="!results.length" class="text-[var(--muted)]">No results recorded.</div><div v-for="r in results" :key="r.id" class="flex items-center justify-between gap-3 border-b border-[var(--border)] py-3"><div><strong>{{r.placing_position||'—'}} · {{entries.find(e=>e.id===r.entry_id)?.team_name||'Entry '+r.entry_id.slice(0,8)}}</strong><p class="text-xs text-[var(--muted)]">{{r.published_at?'Published':'Draft'}} · {{r.status}}</p></div><div class="flex items-center gap-3"><strong>{{r.points||0}} pts</strong><button type="button" :aria-label="'Edit result for '+r.entry_id" class="rounded-lg border border-[var(--border)] px-3 py-2 text-blue-500" @click="editEntry(entries.find(e=>e.id===r.entry_id))">✎</button></div></div></UiPanel>
  </div>
  <UiPanel v-if="competitionId"><h2 class="mb-4 text-xl font-bold">House leaderboard</h2><p v-if="!orderedTotals.length" class="text-[var(--muted)]">House points will appear when valid results are published.</p><div v-for="(t,i) in orderedTotals" :key="t.house_id" class="flex items-center justify-between border-b border-[var(--border)] py-3"><div class="flex items-center gap-3"><strong>{{i+1}}</strong><span class="h-4 w-4 rounded-full" :style="{background:houses.find(h=>h.id===t.house_id)?.colour||'#64748b'}"/><span>{{houseName(t.house_id)}}</span></div><strong>{{t.total_points}} points</strong></div></UiPanel>
+ <div v-if="roundDialog" class="fixed inset-0 z-[65] grid place-items-center bg-black/65 p-4"><section role="dialog" aria-modal="true" aria-label="Round settings" class="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl">
+  <h2 class="mb-4 text-xl font-bold">{{editingRound?'Edit round':'Add round'}}</h2>
+  <form class="space-y-4" @submit.prevent="requestRoundSave">
+   <label class="block font-semibold">Round name<input v-model="roundForm.name" maxlength="80" required class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" placeholder="Final or Heat 1"/></label>
+   <label class="block font-semibold">Round order<input v-model="roundForm.round_order" type="number" min="1" step="1" required class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
+   <div class="flex justify-between gap-2">
+    <button v-if="editingRound" type="button" aria-label="Delete round" class="rounded-lg border border-red-500 px-3 py-2 text-red-500" @click="roundDeleteConfirm=true">Delete</button>
+    <span v-else/>
+    <div class="flex gap-2"><button type="button" aria-label="Cancel round changes" class="rounded-lg border border-[var(--border)] px-4 py-2" @click="roundDialog=false">Cancel</button><button type="submit" aria-label="Save round" class="rounded-lg bg-blue-600 px-4 py-2 text-white" :disabled="roundBusy">Save</button></div>
+   </div>
+  </form>
+ </section></div>
+ <div v-if="roundConfirm||roundDeleteConfirm" class="fixed inset-0 z-[80] grid place-items-center bg-black/70 p-4"><section role="alertdialog" aria-modal="true" class="w-full max-w-sm rounded-2xl bg-[var(--surface)] p-6 shadow-2xl">
+  <h2 class="text-xl font-bold">{{roundDeleteConfirm?'Delete round?':'Save round?'}}</h2>
+  <p class="mt-3 text-[var(--muted)]">{{roundDeleteConfirm?'Delete '+roundForm.name+'? This cannot be undone.':'Save '+roundForm.name+' for this event?'}}</p>
+  <div class="mt-6 flex justify-end gap-3"><button type="button" aria-label="Cancel confirmation" class="rounded-lg border border-[var(--border)] px-4 py-2" @click="roundConfirm=false;roundDeleteConfirm=false">Cancel</button><button type="button" :aria-label="roundDeleteConfirm?'Confirm delete round':'Confirm save round'" :disabled="roundBusy" class="rounded-lg px-4 py-2 text-white" :class="roundDeleteConfirm?'bg-red-600':'bg-blue-600'" @click="roundDeleteConfirm?deleteRound():saveRound()">{{roundDeleteConfirm?'Delete':'Save'}}</button></div>
+ </section></div>
  <div v-if="confirm" class="fixed inset-0 z-[70] grid place-items-center bg-black/70 p-4"><section role="alertdialog" aria-modal="true" class="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 shadow-2xl"><h2 class="text-xl font-bold">Save result?</h2><p class="mt-3 text-[var(--muted)]">Confirm {{form.published?'publishing this result and awarding points':'saving this result as a draft'}}.</p><div class="mt-6 flex justify-end gap-3"><button type="button" aria-label="Cancel" class="rounded-xl border border-[var(--border)] px-4 py-2" @click="confirm=false">Cancel</button><button type="button" aria-label="Confirm save" :disabled="busy" class="rounded-xl bg-blue-600 px-4 py-2 text-white" @click="save">Confirm save</button></div></section></div>
 </div>
 </template>
