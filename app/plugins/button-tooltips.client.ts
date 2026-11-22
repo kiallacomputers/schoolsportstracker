@@ -12,10 +12,10 @@ export default defineNuxtPlugin(() => {
       max-width: min(320px, calc(100vw - 16px));
       padding: 6px 9px;
       border-radius: 7px;
-      background: #17233b;
-      color: white;
+      background: #ffffff;
+      color: #17233b;\n      border: 1px solid #334155;
       font: 500 12px/1.35 system-ui, sans-serif;
-      box-shadow: 0 4px 16px rgba(0,0,0,.22);
+      box-shadow: 0 3px 10px rgba(0,0,0,.12);
       white-space: normal;
       overflow-wrap: anywhere;
       opacity: 0;
