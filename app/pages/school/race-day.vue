@@ -223,7 +223,7 @@ const allResultsEntered=computed(()=>entries.value.length>0&&entries.value.every
 const roundPublished=computed(()=>allResultsEntered.value&&results.value.every(r=>!!r.published_at))
 const sortedRoundResults=computed(()=>[...results.value].sort((a,b)=>(a.placing_position??Number.MAX_SAFE_INTEGER)-(b.placing_position??Number.MAX_SAFE_INTEGER)||Number(b.performance_value??-1)-Number(a.performance_value??-1)||entryName(entries.value.find(e=>e.id===a.entry_id)).localeCompare(entryName(entries.value.find(e=>e.id===b.entry_id)))))
 const houseName=(id:string)=>houses.value.find(h=>h.id===id)?.name||'Unassigned'
-const eventLabel=(e:any)=>[e.event_definitions?.name||'Event',e.age_group,e.division].filter(Boolean).join(' · ')
+const eventLabel=(e:any)=>[e?.event_definitions?.name||'Event',e?.age_group,e?.division].filter(Boolean).join(' · ')
 const orderedTotals=computed(()=>[...totals.value].sort((a,b)=>Number(b.total_points)-Number(a.total_points)))
 async function query(table:string,select:string,field:string,value:string){
  const {data,error:e}=await db.from(table).select(select).eq(field,value)
@@ -296,7 +296,7 @@ const batchRows=ref<{entry_id:string;performance_value:string;status:string}[]>(
 const batchSnapshot=ref('')
 const batchDirty=computed(()=>JSON.stringify(batchRows.value)!==batchSnapshot.value)
 function populateBatch(){batchRows.value=entries.value.map(e=>{const r=results.value.find(v=>v.entry_id===e.id);return {entry_id:e.id,performance_value:r?.performance_value==null?'':String(r.performance_value),status:r?.status||'valid'}});batchSnapshot.value=JSON.stringify(batchRows.value)}
-const validPerformance=(value:string)=>value.trim()!==''&&Number.isSafeInteger(Number(value))&&Number(value)>0
+const validPerformance=(value:string)=>String(value??'').trim()!==''&&Number.isSafeInteger(Number(value))&&Number(value)>0
 const batchReady=computed(()=>batchRows.value.length>0&&batchRows.value.every(r=>r.status!=='valid'||validPerformance(r.performance_value)))
 function batchPlace(row:{entry_id:string;performance_value:string;status:string}){if(row.status!=='valid'||!validPerformance(row.performance_value))return null;return 1+batchRows.value.filter(r=>r.entry_id!==row.entry_id&&r.status==='valid'&&validPerformance(r.performance_value)&&(lowerIsBetter.value?Number(r.performance_value)<Number(row.performance_value):Number(r.performance_value)>Number(row.performance_value))).length}
 function askBatchSave(){if(!batchReady.value){error.value='Enter a positive whole-number performance for each valid result, or select DNS, DNF or DQ.';return}if(roundPublished.value){error.value='Published results are read-only';return}error.value='';confirm.value=true}
