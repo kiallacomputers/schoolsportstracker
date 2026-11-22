@@ -4,6 +4,8 @@ const db=useSupabaseClient()
 const {schoolId}=useSchool()
 const competitions=ref<any[]>([]),events=ref<any[]>([]),rounds=ref<any[]>([]),entries=ref<any[]>([]),results=ref<any[]>([]),houses=ref<any[]>([]),totals=ref<any[]>([])
 const competitionId=ref(''),eventId=ref(''),roundId=ref('')
+const completedRoundIds=ref<string[]>([])
+const availableRounds=computed(()=>rounds.value.filter(r=>!completedRoundIds.value.includes(r.id)))
 const multipleActiveCompetitions=computed(()=>competitions.value.filter(c=>c.status==='active').length>1)
 const loading=ref(false),busy=ref(false),error=ref(''),notice=ref(''),confirm=ref(false),publishConfirm=ref(false),publishing=ref(false)
 const students=ref<any[]>([]),participants=ref<any[]>([]),entryDialog=ref(false),entryConfirm=ref(false),entryBusy=ref(false),entryStudentId=ref(''),entryStudentIds=ref<string[]>([]),entrySearch=ref(''),entryTeamName=ref(''),entryTeamStudents=ref<string[]>([]),entryDeleteConfirm=ref(false),editingEntry=ref<any|null>(null)
@@ -231,7 +233,7 @@ async function loadEvents(){
  }catch(e:any){error.value=e.message||'Unable to load events'}finally{loading.value=false}
 }
 async function loadRounds(){
- roundId.value='';rounds.value=[];entries.value=[];results.value=[];batchRows.value=[]
+ roundId.value='';rounds.value=[];entries.value=[];results.value=[];batchRows.value=[];completedRoundIds.value=[]
  if(!eventId.value)return
  loading.value=true;error.value=''
  try{
@@ -242,7 +244,20 @@ async function loadRounds(){
   rounds.value=r.sort((a:any,b:any)=>(a.round_order||0)-(b.round_order||0))
   entries.value=en.filter((v:any)=>v.school_id===schoolId.value)
   await loadParticipants()
+  await refreshRoundAvailability()
+  if(availableRounds.value.length===1){roundId.value=availableRounds.value[0].id;await loadResults()}
  }catch(e:any){error.value=e.message||'Unable to load rounds'}finally{loading.value=false}
+}
+async function refreshRoundAvailability(){
+ completedRoundIds.value=[]
+ if(!rounds.value.length||!entries.value.length)return
+ const {data,error:e}=await db.from('event_results').select('round_id,entry_id,published_at').in('round_id',rounds.value.map(r=>r.id))
+ if(e)throw e
+ const registered=new Set(entries.value.map(e=>e.id))
+ completedRoundIds.value=rounds.value.filter(round=>{
+  const records=(data||[]).filter(r=>r.round_id===round.id&&registered.has(r.entry_id))
+  return records.length===registered.size&&new Set(records.map(r=>r.entry_id)).size===registered.size&&records.every(r=>!!r.published_at)
+ }).map(r=>r.id)
 }
 async function loadResults(){
  results.value=[];form.entry_id=''
@@ -322,6 +337,8 @@ async function publishRound(){
   const {data:updatedTotals,error:totalsError}=await db.from('competition_house_totals').select('competition_id,school_id,house_id,total_points,scored_results').eq('competition_id',competitionId.value)
   if(totalsError)throw totalsError
   totals.value=(updatedTotals||[]).filter((t:any)=>t.school_id===schoolId.value)
+  await refreshRoundAvailability()
+  if(completedRoundIds.value.includes(roundId.value)){roundId.value='';results.value=[];batchRows.value=[];if(availableRounds.value.length===1){roundId.value=availableRounds.value[0].id;await loadResults()}}
   notice.value='Round results published and house points updated'
  }catch(e:any){error.value=e.message||'Unable to publish round results. Refresh to check progress before retrying.'}
  finally{publishing.value=false}
@@ -338,9 +355,10 @@ watch(schoolId,loadCompetitions,{immediate:true})
   <p v-if="competitionId" class="mb-4 text-sm"><span class="font-semibold">Active competition:</span> {{competitionSettings?.name}}</p>
   <div v-if="competitionId" class="grid gap-4 md:grid-cols-2">
    <label class="block font-semibold">Event<select v-model="eventId" :disabled="!competitionId" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" @change="loadRounds"><option value="">Choose event</option><option v-for="e in events" :key="e.id" :value="e.id">{{eventLabel(e)}}</option></select></label>
-   <label class="block font-semibold">Round<select v-model="roundId" :disabled="!eventId" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" @change="loadResults"><option value="">Choose round</option><option v-for="r in rounds" :key="r.id" :value="r.id">{{r.name}}</option></select></label>
+   <label v-if="availableRounds.length" class="block font-semibold">Round<select v-model="roundId" :disabled="!eventId" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" @change="loadResults"><option value="">Choose round</option><option v-for="r in availableRounds" :key="r.id" :value="r.id">{{r.name}}</option></select></label>
   </div>
   <p v-if="loading" class="mt-4 text-sm text-[var(--muted)]">Loading…</p>
+  <p v-else-if="eventId&&rounds.length&&!availableRounds.length" class="mt-3 text-sm text-[var(--muted)]">All rounds for this event are completed and published.</p>
   <div v-if="eventId" class="mt-4 flex flex-wrap items-center gap-2">
    <button type="button" aria-label="Add round" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white" @click="openRound()">+ Add round</button>
    <button v-if="!rounds.length" type="button" aria-label="Create final round" class="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold" @click="openRound()">Create single Final</button>
