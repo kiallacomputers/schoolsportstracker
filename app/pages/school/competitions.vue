@@ -233,6 +233,7 @@ async function rollbackToRegistration(){
   const {error:e}=await db.rpc('return_competition_to_registration',{p_competition_id:c.id})
   if(e)throw e
   rollbackTarget.value=null
+  if(selected.value?.id===c.id){dialog.value=false;selected.value=null}
   notice.value=c.name+' returned to Registrations. Review registrations before activating again.'
   await load()
  }catch(e:any){error.value=e.message||'Unable to return competition to registration'}
@@ -249,7 +250,7 @@ async function save(){
   if(!Number.isInteger(form.school_year)||form.school_year<2000||form.school_year>2100)throw new Error('Enter a valid school year')
   if(!sports.value.some(s=>s.id===form.sport_id))throw new Error('Select a sport')
   if(selected.value){
-   if(selected.value.status==='active'&&form.status==='registration')throw new Error('Use the Platform Admin Return to Registrations action.')
+   if(selected.value.status==='active'&&form.status!==selected.value.status)throw new Error('Use the Platform Admin Return to Registrations action.')
    const {data,error:e}=await db.from('competitions').update({name,sport_id:form.sport_id,school_year:form.school_year,starts_on:form.starts_on||null,status:form.status}).eq('id',selected.value.id).eq('organiser_school_id',schoolId.value).select('id').single()
    if(e)throw e
    if(!data)throw new Error('Competition could not be updated')
@@ -296,7 +297,7 @@ watch(schoolId,()=>{confirmSave.value=false;dialog.value=false;void load()},{imm
     <label class="block text-sm font-semibold">School year<input v-model.number="form.school_year" type="number" min="2000" max="2100" required class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
     <label class="block text-sm font-semibold">Competition date<input v-model="form.starts_on" type="date" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
    </div>
-   <label v-if="selected" class="block text-sm font-semibold">Status<select v-model="form.status" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option v-for="s in statuses.filter(s=>!(selected?.status==='active'&&s==='registration'))" :key="s" :value="s">{{s.replaceAll('_',' ')}}</option></select></label>
+   <div v-if="selected" class="space-y-3"><label class="block text-sm font-semibold">Status<select v-model="form.status" :disabled="selected.status==='active'" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 disabled:opacity-60"><option v-for="s in statuses" :key="s" :value="s">{{s.replaceAll('_',' ')}}</option></select></label><div v-if="selected.status==='active'" class="rounded-lg border border-amber-300 p-3"><p class="text-sm">Active competitions cannot be moved back using the status selector.</p><button v-if="platformAdmin" type="button" class="mt-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white" @click="rollbackTarget=selected">Return to Registrations (Platform Admin)</button><p v-else class="mt-2 text-xs text-[var(--muted)]">Only a Platform Admin can return this competition to Registrations.</p></div></div>
    <p v-else class="text-sm text-[var(--muted)]">New competitions are created as drafts. Registration and event settings will be configured in the next stage.</p>
    <div class="flex justify-end gap-3"><button type="button" aria-label="Cancel" title="Cancel" class="rounded-xl border border-[var(--border)] p-3 text-[#991B1B]" @click="close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg></button><button type="submit" aria-label="Save competition" title="Save competition" :disabled="busy||!sports.length" class="rounded-xl bg-blue-600 p-3 text-white disabled:opacity-50"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button></div>
   </form>
