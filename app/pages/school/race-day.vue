@@ -314,7 +314,7 @@ watch(schoolId,loadCompetitions,{immediate:true})
 </script>
 <template>
 <div class="space-y-6">
- <header><h1 class="text-3xl font-extrabold">Race Day</h1><p class="mt-2 text-[var(--muted)]">Enter results, publish placings and monitor house points.</p></header>
+ <header><h1 class="text-3xl font-extrabold">Event Day</h1><p class="mt-2 text-[var(--muted)]">Enter results, publish placings and monitor house points.</p></header>
  <p v-if="error" role="alert" class="rounded-xl border border-red-300 bg-red-50 p-4 text-red-700">{{error}}</p>
  <p v-if="notice" role="status" class="rounded-xl border border-green-300 bg-green-50 p-4 text-green-800">{{notice}}</p>
  <UiPanel>
