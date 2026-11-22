@@ -4,6 +4,7 @@ const db=useSupabaseClient()
 const {schoolId}=useSchool()
 const competitions=ref<any[]>([]),events=ref<any[]>([]),rounds=ref<any[]>([]),entries=ref<any[]>([]),results=ref<any[]>([]),houses=ref<any[]>([]),totals=ref<any[]>([])
 const competitionId=ref(''),eventId=ref(''),roundId=ref('')
+const multipleActiveCompetitions=computed(()=>competitions.value.filter(c=>c.status==='active').length>1)
 const loading=ref(false),busy=ref(false),error=ref(''),notice=ref(''),confirm=ref(false),publishConfirm=ref(false),publishing=ref(false)
 const students=ref<any[]>([]),participants=ref<any[]>([]),entryDialog=ref(false),entryConfirm=ref(false),entryBusy=ref(false),entryStudentId=ref(''),entryStudentIds=ref<string[]>([]),entrySearch=ref(''),entryTeamName=ref(''),entryTeamStudents=ref<string[]>([]),entryDeleteConfirm=ref(false),editingEntry=ref<any|null>(null)
 const studentName=(id:string)=>{const s=students.value.find(v=>v.id===id);return s?[s.given_name,s.family_name].filter(Boolean).join(' '):'Unknown student'}
@@ -211,6 +212,9 @@ async function loadCompetitions(){
    query('school_houses','id,name,colour','school_id',schoolId.value)
   ])
   competitions.value=c;houses.value=h
+  const active=c.filter((competition:any)=>competition.status==='active')
+  if(active.length===1){competitionId.value=active[0].id;await loadEvents()}
+  else if(active.length>1)error.value='More than one active competition was found for this school. Resolve this in Competitions before using Race Day.'
  }catch(e:any){error.value=e.message||'Unable to load competitions'}finally{loading.value=false}
 }
 async function loadEvents(){
@@ -314,8 +318,9 @@ watch(schoolId,loadCompetitions,{immediate:true})
  <p v-if="error" role="alert" class="rounded-xl border border-red-300 bg-red-50 p-4 text-red-700">{{error}}</p>
  <p v-if="notice" role="status" class="rounded-xl border border-green-300 bg-green-50 p-4 text-green-800">{{notice}}</p>
  <UiPanel>
-  <div class="grid gap-4 md:grid-cols-3">
-   <label class="block font-semibold">Competition<select v-model="competitionId" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" @change="loadEvents"><option value="">Choose competition</option><option v-for="c in competitions" :key="c.id" :value="c.id">{{c.name}}</option></select></label>
+  <p v-if="!competitionId&&!loading&&!multipleActiveCompetitions" class="mb-4 text-sm text-[var(--muted)]">No active competition is available for this school. Activate a competition in Competitions to begin Race Day.</p>
+  <p v-if="competitionId" class="mb-4 text-sm"><span class="font-semibold">Active competition:</span> {{competitionSettings?.name}}</p>
+  <div v-if="competitionId" class="grid gap-4 md:grid-cols-2">
    <label class="block font-semibold">Event<select v-model="eventId" :disabled="!competitionId" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" @change="loadRounds"><option value="">Choose event</option><option v-for="e in events" :key="e.id" :value="e.id">{{eventLabel(e)}}</option></select></label>
    <label class="block font-semibold">Round<select v-model="roundId" :disabled="!eventId" class="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3" @change="loadResults"><option value="">Choose round</option><option v-for="r in rounds" :key="r.id" :value="r.id">{{r.name}}</option></select></label>
   </div>
