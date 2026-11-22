@@ -1,10 +1,13 @@
 <script setup lang="ts">
 const loading = ref(true)
+const workspacePending = useState('sst-workspace-pending', () => false)
+const browserReady = ref(false)
 const nuxtApp = useNuxtApp()
 let finishTimer: ReturnType<typeof setTimeout> | undefined
 
 function finishLoading() {
   if (import.meta.server) return
+  if (!browserReady.value || workspacePending.value) return
   // Wait until the browser has painted the hydrated page before revealing it.
   requestAnimationFrame(() => requestAnimationFrame(() => {
     loading.value = false
@@ -13,6 +16,7 @@ function finishLoading() {
 
 onMounted(() => {
   const reveal = () => {
+    browserReady.value = true
     nextTick(() => finishLoading())
   }
   if (document.readyState === 'complete') reveal()
@@ -20,6 +24,8 @@ onMounted(() => {
   // Safety net: a slow external resource must not leave the site blocked forever.
   finishTimer = setTimeout(reveal, 12000)
 })
+
+watch(workspacePending, (pending) => { if (!pending) nextTick(() => finishLoading()) })
 
 nuxtApp.hook('page:start', () => {
   if (import.meta.client) loading.value = true
