@@ -2,7 +2,7 @@ export function useNavigation() {
   const {schoolId,platformAdmin,schoolRole}=useSchool()
   const links=computed(()=>{
     const suffix=schoolId.value?'?school='+encodeURIComponent(schoolId.value):''
-    const admin=platformAdmin.value?[{label:'Schools',to:'/admin/schools'}]:[]
+    const admin=platformAdmin.value?[{label:'Schools',to:'/admin/schools'},{label:'Platform Administrators',to:'/admin/platform-admins'}]:[]
     const school=schoolId.value?[
       {label:'Houses',to:'/school/houses'+suffix},
       {label:'Staff',to:'/school/staff'+suffix},
