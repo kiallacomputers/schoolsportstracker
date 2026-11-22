@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
   const password = String(body?.password || '')
   const firstName = String(body?.firstName || '').trim()
   const lastName = String(body?.lastName || '').trim()
-  if ((kind !== 'staff' && kind !== 'school_admin') || !/^[a-f0-9]{64}$/.test(token) ||
+  if ((kind !== 'staff' && kind !== 'school_admin' && kind !== 'platform_admin') || !/^[a-f0-9]{64}$/.test(token) ||
       password.length < 12 || password.length > 128 || !firstName || !lastName ||
       firstName.length > 100 || lastName.length > 100) {
     throw createError({ statusCode: 400, statusMessage: 'Valid invitation, name and password (12–128 characters) required' })
