@@ -11,6 +11,8 @@ const availableAges=computed(()=>[...new Set(schoolEvents.value.filter(e=>e.even
 const availableDivisions=computed(()=>[...new Set(schoolEvents.value.filter(e=>e.event_definition_id===selectedDefinition.value&&(e.age_group||'')===ageGroup.value).map(e=>e.division||''))].sort())
 function selectFirstAge(){if(!availableAges.value.includes(ageGroup.value))ageGroup.value=availableAges.value[0]||'';selectFirstDivision()}
 function selectFirstDivision(){if(!availableDivisions.value.includes(division.value))division.value=availableDivisions.value[0]||''}
+const selectedRecordContext=computed(()=>[definition.value?.name,ageGroup.value||'All ages',division.value||'All divisions',recordScope.value].filter(Boolean).join(' · '))
+const orderedRecords=computed(()=>[...records.value].sort((a,b)=>String(a.event_definition_id).localeCompare(String(b.event_definition_id))||String(a.age_group).localeCompare(String(b.age_group))||String(a.division).localeCompare(String(b.division))))
 const current=computed(()=>records.value.find(r=>r.event_definition_id===selectedDefinition.value&&r.age_group===ageGroup.value&&r.division===division.value&&r.record_scope===recordScope.value))
 const timeBased=computed(()=>definition.value?.measurement?.startsWith('time'))
 const format=(v:number)=>definition.value?.measurement==='distance_mm'?(v/1000).toFixed(3)+' m':definition.value?.measurement==='time_ms'?(v/1000).toFixed(3)+' s':String(v)
@@ -39,6 +41,7 @@ async function save(){
  if(busy.value||!schoolId.value||!selectedDefinition.value)return
  busy.value=true;error.value='';notice.value=''
  try{
+  if(!ageGroup.value||!division.value||!schoolEvents.value.some(e=>e.event_definition_id===selectedDefinition.value&&e.age_group===ageGroup.value&&e.division===division.value))throw new Error('Select a configured event, age group and division before saving the record')
   const n=Number(value.value)
   if(!holder.value.trim()||!Number.isSafeInteger(n)||n<=0)throw new Error('Enter a holder and a positive whole-number performance')
   const {error:e}=await db.from('school_records').upsert({school_id:schoolId.value,event_definition_id:selectedDefinition.value,age_group:ageGroup.value,division:division.value,record_scope:recordScope.value,holder_name:holder.value.trim(),performance_value:n,achieved_on:achieved.value||null},{onConflict:'school_id,event_definition_id,age_group,division,record_scope'})
@@ -67,9 +70,10 @@ watch([selectedDefinition,ageGroup,division,recordScope],resetForm)
  </UiPanel>
  <UiPanel>
   <h2 class="mb-3 text-xl font-bold">Verified record</h2>
+  <p class="mb-3 text-sm font-semibold text-blue-600">{{selectedRecordContext}}</p>
   <p v-if="current"><strong>{{current.holder_name}}</strong> · {{format(Number(current.performance_value))}}{{current.achieved_on?' · '+current.achieved_on:''}}</p>
   <p v-else class="text-sm text-[var(--muted)]">No verified historical record exists for this exact event, age group and division. Enter one before checking for record breakers.</p>
-  <button type="button" class="mt-4 rounded-lg border border-[var(--border)] px-4 py-2 font-semibold" @click="resetForm();confirm=true">{{current?'Edit verified record':'Enter historical record'}}</button>
+  <button type="button" :disabled="!selectedDefinition||!ageGroup||!division" class="mt-4 rounded-lg border border-[var(--border)] px-4 py-2 font-semibold disabled:opacity-40" @click="resetForm();confirm=true">{{current?'Edit verified record':'Enter historical record'}}</button>
  </UiPanel>
  <UiPanel>
   <h2 class="mb-3 text-xl font-bold">Record comparisons</h2>
@@ -77,8 +81,13 @@ watch([selectedDefinition,ageGroup,division,recordScope],resetForm)
   <p v-else-if="!improved.length" class="text-sm text-[var(--muted)]">No published performance exceeds this verified record.</p>
   <div v-for="r in improved" :key="r.id" class="flex items-center justify-between gap-3 border-b border-[var(--border)] py-3"><div><strong>{{r.holder_name}}</strong><p class="text-sm text-[var(--muted)]">{{format(Number(r.performance_value))}} · Published result</p></div><button type="button" class="rounded-lg bg-blue-600 px-3 py-2 font-semibold text-white" @click="reviewCandidate(r)">Review</button></div>
  </UiPanel>
+ <UiPanel>
+  <h2 class="mb-3 text-lg font-bold">Saved record baselines</h2>
+  <p class="mb-3 text-xs text-[var(--muted)]">Every record is linked to a specific event, age group and division. Select a row to review or edit it.</p>
+  <div class="overflow-x-auto"><table class="w-full min-w-[570px] text-left text-sm"><thead class="bg-[var(--panel)]"><tr><th class="p-2">Event</th><th class="p-2">Age group</th><th class="p-2">Division</th><th class="p-2">Type</th><th class="p-2">Holder</th><th class="p-2">Performance</th><th class="p-2 text-right">Action</th></tr></thead><tbody><tr v-for="r in orderedRecords" :key="r.id" class="border-t border-[var(--border)]"><td class="p-2">{{definitions.find(d=>d.id===r.event_definition_id)?.name||'Unknown'}}</td><td class="p-2">{{r.age_group||'All ages'}}</td><td class="p-2">{{r.division||'All divisions'}}</td><td class="p-2">{{r.record_scope}}</td><td class="p-2">{{r.holder_name}}</td><td class="p-2">{{r.performance_value}}</td><td class="p-2 text-right"><button type="button" class="rounded-lg border border-[var(--border)] px-2 py-1 text-blue-600" title="View record" @click="selectedDefinition=r.event_definition_id;ageGroup=r.age_group;division=r.division;recordScope=r.record_scope;resetForm()">View</button></td></tr></tbody></table><p v-if="!orderedRecords.length" class="p-3 text-sm text-[var(--muted)]">No record baselines have been entered.</p></div>
+ </UiPanel>
  <div v-if="confirm" class="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" @click.self="confirm=false"><section role="dialog" aria-modal="true" aria-label="Confirm school record" class="w-full max-w-lg space-y-4 rounded-xl bg-[var(--surface)] p-6 text-[var(--ink)]">
-  <h2 class="text-xl font-bold">Confirm school record</h2><p class="text-sm text-[var(--muted)]">Verify the official result before saving. Measurements are stored as {{definition?.measurement}}. This does not change scoring.</p>
+  <h2 class="text-xl font-bold">Confirm school record</h2><div class="rounded-lg border border-blue-300 bg-blue-50 p-3 text-sm text-blue-950"><p class="font-bold">Record applies to:</p><p>{{selectedRecordContext}}</p><p class="mt-1 text-xs">Only results matching this event, age group and division will be compared against this record.</p></div><p class="text-sm text-[var(--muted)]">Verify the official result before saving. Measurements are stored as {{definition?.measurement}}. This does not change scoring.</p>
   <label class="block text-sm font-semibold">Record holder<input v-model="holder" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
   <label class="block text-sm font-semibold">Performance ({{definition?.measurement}})<input v-model="value" type="number" min="1" step="1" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
   <label class="block text-sm font-semibold">Date achieved<input v-model="achieved" type="date" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
