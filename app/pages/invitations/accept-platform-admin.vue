@@ -29,7 +29,7 @@ onMounted(async()=>{
    <p class="mt-4">Sign in or create an account using the invited email address. Confirm your email before accepting.</p>
    <div class="mt-5 flex flex-wrap gap-3">
     <NuxtLink class="rounded-lg bg-blue-600 p-3 text-white" :to="'/login?redirect='+encodeURIComponent(next)">Sign in</NuxtLink>
-    <NuxtLink class="rounded-lg border p-3" :to="'/register?redirect='+encodeURIComponent(next)">Create account</NuxtLink>
+    <NuxtLink class="rounded-lg border p-3" :to="'/invitations/register-platform-admin?token='+encodeURIComponent(token)">Create account</NuxtLink>
    </div>
    <button v-if="error" type="button" class="mt-4 underline" @click="accept">Try again</button>
   </template>
