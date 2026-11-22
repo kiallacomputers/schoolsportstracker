@@ -386,7 +386,7 @@ async function refreshRoundAvailability(){
   return records.length===registered.size&&new Set(records.map(r=>r.entry_id)).size===registered.size&&records.every(r=>!!r.published_at)
  }).map(r=>r.id)
 }
-async async function loadResults(){
+async function loadResults(){
  results.value=[];form.entry_id=''
  if(!roundId.value)return
  try{results.value=await query('event_results','id,entry_id,placing_position,performance_value,status,points,published_at,record_badge','round_id',roundId.value);populateBatch();await loadJumpAttempts();snapshotJump()}
