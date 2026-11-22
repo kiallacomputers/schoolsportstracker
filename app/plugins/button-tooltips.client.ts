@@ -22,6 +22,12 @@ export default defineNuxtPlugin(() => {
       visibility: hidden;
       transition: opacity 70ms ease-out;
     }
+    .sst-button-tooltip[data-theme="dark"] {
+      background: var(--sst-tooltip-bg, #0b1628);
+      color: var(--sst-tooltip-ink, #eef5fd);
+      border-color: var(--sst-tooltip-border, #344b67);
+      box-shadow: 0 3px 12px rgba(0,0,0,.35);
+    }
     .sst-button-tooltip[data-visible="true"] { opacity: 1; visibility: visible; }
   `
   document.head.appendChild(style)
