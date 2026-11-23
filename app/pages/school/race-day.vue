@@ -621,7 +621,19 @@ function jumpAttemptChanged(entryId:string,index:number){
    const {data,error:refreshError}=await db.from('event_results').select('id,entry_id,placing_position,performance_value,status,points,published_at,record_badge').eq('round_id',round)
    if(jumpSaveVersions.get(key)!==version)return
    if(refreshError){jumpSaveState.value[key]='error';return}
-   if(roundId.value===round&&data)results.value=data
+   if(roundId.value===round&&data){
+    results.value=data
+    // Refresh draft placings for all completed competitors as their best distances change.
+    const valid=data.filter(r=>r.status==='valid'&&r.performance_value!=null)
+    for(const candidate of valid){
+     const place=1+valid.filter(other=>other.entry_id!==candidate.entry_id&&(lowerIsBetter.value?Number(other.performance_value)<Number(candidate.performance_value):Number(other.performance_value)>Number(candidate.performance_value))).length
+     if(candidate.placing_position!==place){
+      const {error:placeError}=await db.from('event_results').update({placing_position:place}).eq('id',candidate.id).is('published_at',null)
+      if(placeError){jumpSaveState.value[key]='error';return}
+      candidate.placing_position=place
+     }
+    }
+   }
   }
   jumpSaveState.value[key]='saved'
  },1000))
@@ -750,7 +762,20 @@ async function publishRound(){
   const {data:current,error:readError}=await db.from('event_results').select('id,entry_id,status,performance_value,placing_position,published_at').eq('round_id',roundId.value)
   if(readError)throw readError
   if(!current||current.length!==entries.value.length||!entries.value.every(e=>current.some(r=>r.entry_id===e.id)))throw new Error('Not every registered participant has a result. Refresh and review before publishing.')
-  if(current.some(r=>r.status==='valid'&&(r.performance_value==null||r.placing_position==null)))throw new Error('Some valid results have missing performances or placings.')
+  if(current.some(r=>r.status==='valid'&&r.performance_value==null))throw new Error('Some valid results have missing performances.')
+  // Recalculate every placing from the persisted results before publishing.
+  // Auto-saved individual attempts may have arrived in a different order.
+  const ranked=current.filter(r=>r.status==='valid'&&r.performance_value!=null)
+  for(const result of current){
+   const position=result.status==='valid'
+    ?1+ranked.filter(other=>other.entry_id!==result.entry_id&&(lowerIsBetter.value?Number(other.performance_value)<Number(result.performance_value):Number(other.performance_value)>Number(result.performance_value))).length
+    :null
+   if(result.placing_position!==position){
+    const {error:placeError}=await db.from('event_results').update({placing_position:position}).eq('id',result.id).is('published_at',null)
+    if(placeError)throw placeError
+    result.placing_position=position
+   }
+  }
   const timestamp=new Date().toISOString()
   for(const result of current.filter(r=>!r.published_at)){
    const {error:publishError}=await db.from('event_results').update({published_at:timestamp}).eq('id',result.id).is('published_at',null)
