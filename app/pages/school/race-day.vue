@@ -552,12 +552,17 @@ const jumpSnapshot=ref('{}')
 function snapshotJump(){jumpSnapshot.value=JSON.stringify(jumpAttempts.value)}
 async function saveJumpAttempts(){
  if(!roundId.value)return
+ // Update attempts without deleting the entire athlete's history first.
+ // This prevents a failed insert from erasing previously saved jumps.
  for(const row of batchRows.value){
   const attempts=jumpRows(row.entry_id)
-  const {error:deleteError}=await db.from('field_event_attempts').delete().eq('round_id',roundId.value).eq('entry_id',row.entry_id)
-  if(deleteError)throw deleteError
   const payload=attempts.flatMap((a,i)=>a.status==='valid'&&!a.distance.trim()?[]:[{round_id:roundId.value,entry_id:row.entry_id,attempt_number:i+1,status:a.status,distance_mm:a.status==='valid'?jumpMm(a.distance):null}])
-  if(payload.length){const {error:e}=await db.from('field_event_attempts').insert(payload);if(e)throw e}
+  if(payload.length){const {error:e}=await db.from('field_event_attempts').upsert(payload,{onConflict:'round_id,entry_id,attempt_number'});if(e)throw e}
+  const keep=new Set(payload.map(a=>a.attempt_number))
+  for(let n=1;n<=3;n++)if(!keep.has(n)){
+   const {error:e}=await db.from('field_event_attempts').delete().eq('round_id',roundId.value).eq('entry_id',row.entry_id).eq('attempt_number',n)
+   if(e)throw e
+  }
  }
 }
 const batchRows=ref<{entry_id:string;performance_value:string;status:string}[]>([])
@@ -567,7 +572,7 @@ function populateBatch(){batchRows.value=entries.value.map(e=>{const r=results.v
 const validPerformance=(value:string)=>String(value??'').trim()!==''&&Number.isSafeInteger(Number(value))&&Number(value)>0
 const batchReady=computed(()=>batchRows.value.length>0&&batchRows.value.every(r=>r.status!=='valid'||validPerformance(r.performance_value)))
 function batchPlace(row:{entry_id:string;performance_value:string;status:string}){if(row.status!=='valid'||!validPerformance(row.performance_value))return null;return 1+batchRows.value.filter(r=>r.entry_id!==row.entry_id&&r.status==='valid'&&validPerformance(r.performance_value)&&(lowerIsBetter.value?Number(r.performance_value)<Number(row.performance_value):Number(r.performance_value)>Number(row.performance_value))).length}
-function askBatchSave(){if(isLongJump.value){for(const row of batchRows.value){updateJumpRow(row);if(row.status==='valid'&&jumpRows(row.entry_id).some(a=>a.status==='valid'&&a.distance.trim()&&jumpMm(a.distance)===null)){error.value='Enter jump distances in metres, up to three decimal places (e.g. 4.250).';return}}}if(!batchReady.value){error.value='Enter a positive whole-number performance for each valid result, or select DNS, DNF or DQ.';return}if(roundPublished.value){error.value='Published results are read-only';return}error.value='';confirm.value=true}
+function askBatchSave(){if(isLongJump.value){for(const row of batchRows.value){updateJumpRow(row);if(row.status==='valid'&&jumpRows(row.entry_id).some(a=>a.status==='valid'&&a.distance.trim()&&jumpMm(a.distance)===null)){error.value='Enter jump distances in metres, up to three decimal places (e.g. 4.250).';return}}}if(!batchReady.value){error.value=isLongJump.value?'Every valid Long Jump result needs at least one measured jump. For no valid jump, choose DNF or DQ.':'Enter a positive whole-number performance for each valid result, or select DNS, DNF or DQ.';return}if(roundPublished.value){error.value='Published results are read-only';return}error.value='';confirm.value=true}
 async function saveBatch(){if(busy.value||!roundId.value)return;busy.value=true;confirm.value=false;error.value='';notice.value='';let saved=0
  try{if(isLongJump.value){for(const row of batchRows.value)updateJumpRow(row)}if(!batchReady.value)throw new Error('Complete all valid performances first')
  for(const row of batchRows.value){const old=results.value.find(r=>r.entry_id===row.entry_id);if(old?.published_at)throw new Error('Cannot change published results')
