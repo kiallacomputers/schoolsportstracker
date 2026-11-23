@@ -161,6 +161,7 @@ async function saveHeatResults(){
  }catch(e:any){heatError.value=e.message||'Unable to save heat results'}finally{heatResultsSaving.value=false}
 }
 const heatReadiness=ref<Record<string,'pending'|'ready'|'created'>>({})
+watch(heatDialog,(open)=>{if(!open&&competitionId.value)void loadSchedule()})
 const resultsDialog=ref(false),editingResults=ref(false),scheduleRows=ref<any[]>([]),scheduleLoading=ref(false),scheduleError=ref('')
 const scheduleView=computed(()=>[...scheduleRows.value].sort((a,b)=>String(a.scheduled_on||'9999').localeCompare(String(b.scheduled_on||'9999'))||String(a.starts_at||'99:99').localeCompare(String(b.starts_at||'99:99'))||(a.schedule_order??9999)-(b.schedule_order??9999)||(a.round_order??0)-(b.round_order??0)))
 async function openScheduledRound(row:any){
