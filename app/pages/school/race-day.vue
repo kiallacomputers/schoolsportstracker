@@ -785,9 +785,14 @@ async function publishRound(){
     result.placing_position=position
    }
   }
+  const {data:competition,error:schemeError}=await db.from('competitions').select('scoring_scheme').eq('id',competitionId.value).single()
+  if(schemeError)throw schemeError
+  const placingPoints=competition?.scoring_scheme?.placing_points
+  if(!Array.isArray(placingPoints))throw new Error('Competition placing points are not configured.')
   const timestamp=new Date().toISOString()
   for(const result of current.filter(r=>!r.published_at)){
-   const {error:publishError}=await db.from('event_results').update({published_at:timestamp}).eq('id',result.id).is('published_at',null)
+   const points=result.status==='valid'&&result.placing_position!=null?Number(placingPoints[result.placing_position-1]??0):0
+   const {error:publishError}=await db.from('event_results').update({published_at:timestamp,points}).eq('id',result.id).is('published_at',null)
    if(publishError)throw publishError
   }
   await loadResults()
