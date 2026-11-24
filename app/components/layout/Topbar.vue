@@ -1,9 +1,8 @@
 <script setup lang="ts">
 defineEmits<{ menu: [] }>()
 const user = useSupabaseUser()
-const { schoolOptions, schoolId } = useSchool()
-const { organizationLevel, administrationLevel } = useNavigation()
-const title = computed(() => organizationLevel.value || administrationLevel.value ? 'School Sports Tracker' : schoolOptions.value.find(s => s.id === schoolId.value)?.name || 'School Sports Tracker')
+const { schoolOptions, schoolId, platformAdmin } = useSchool()
+const title = computed(() => schoolOptions.value.find(s => s.id === schoolId.value)?.name || 'School Sports Tracker')
 </script>
 
 <template>
@@ -11,7 +10,7 @@ const title = computed(() => organizationLevel.value || administrationLevel.valu
     <div class="flex min-w-0 items-center gap-3">
       <button class="lg:hidden" aria-label="Open menu" @click="$emit('menu')">☰</button>
       <div class="min-w-0">
-        <p class="text-xs text-[var(--muted)]">{{ administrationLevel ? 'Platform administration' : organizationLevel ? 'Organizations' : 'School workspace' }}</p>
+        <p class="text-xs text-[var(--muted)]">{{ platformAdmin ? 'Platform administration' : 'School workspace' }}</p>
         <h1 class="truncate font-bold">{{ title }}</h1>
       </div>
     </div>
