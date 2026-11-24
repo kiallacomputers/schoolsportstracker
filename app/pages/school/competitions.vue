@@ -3,7 +3,8 @@ definePageMeta({layout:'workspace'})
 type Competition={id:string;name:string;sport_id:string|null;competition_type:string;management_mode:string;heat_entry_mode:string;organiser_school_id:string|null;school_year:number;starts_on:string|null;status:string}
 type Sport={id:string;name:string}
 const db=useSupabaseClient()
-const {schoolId,platformAdmin}=useSchool()
+const {schoolId,platformAdmin,schoolOptions}=useSchool()
+const schoolName=computed(()=>schoolOptions.value.find(school=>school.id===schoolId.value)?.name)
 const {has}=useSchoolPermissions()
 const competitions=ref<Competition[]>([])
 const sports=ref<Sport[]>([])
@@ -205,7 +206,25 @@ async function saveScoring(){
 const pointsPreview=computed(()=>{try{return parsePoints(scoringForm.points)}catch{return []}})
 const statuses=['draft','registration','active','completed','archived']
 const form=reactive({name:'',sport_id:'',school_year:new Date().getFullYear(),starts_on:'',status:'draft',heat_entry_mode:'sequential'})
-const visible=computed(()=>competitions.value.filter(c=>(statusFilter.value==='all'||c.status===statusFilter.value)&&[c.name,c.school_year,sportName(c.sport_id)].join(' ').toLowerCase().includes(search.value.toLowerCase())))
+const meetPeriod=ref<'upcoming'|'past'>('upcoming')
+function isPast(competition: Competition, today: string) {
+ return ['completed','archived'].includes(competition.status)
+  || (competition.status !== 'active' && !!competition.starts_on && competition.starts_on < today)
+}
+const visible=computed(()=>{
+ const now=new Date()
+ const today=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-')
+ const query=search.value.trim().toLowerCase()
+ return competitions.value.filter(competition=>
+  isPast(competition,today)===(meetPeriod.value==='past')
+  && (statusFilter.value==='all'||competition.status===statusFilter.value)
+  && [competition.name,competition.school_year,sportName(competition.sport_id)].join(' ').toLowerCase().includes(query)
+ )
+})
+function changePeriod(period: 'upcoming'|'past') {
+ meetPeriod.value=period
+ statusFilter.value='all'
+}
 const canCreate=computed(()=>!!schoolId.value&&has('competitions.create'))
 const canEdit=(c:Competition)=>c.competition_type==='intra_school'&&c.organiser_school_id===schoolId.value&&has('competitions.manage')
 function sportName(id:string|null){return sports.value.find(s=>s.id===id)?.name||'Not specified'}
@@ -273,14 +292,16 @@ watch(schoolId,()=>{confirmSave.value=false;dialog.value=false;void load()},{imm
 </script>
 <template>
 <div class="space-y-6">
- <UiPageHeader title="Competitions" description="Create and manage your school's athletics, swimming and other sporting competitions.">
-  <template #actions><button v-if="canCreate" aria-label="New competition" title="New competition" class="rounded-xl bg-blue-600 p-3 text-white hover:bg-blue-700" @click="reset"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button> <div v-if="rollbackTarget" class="fixed inset-0 z-[70] grid place-items-center bg-black/70 p-4"><section role="alertdialog" aria-modal="true" aria-label="Return competition to Registrations" class="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl"><h2 class="text-xl font-bold">Return to Registrations?</h2><p class="mt-3 text-sm">Return <strong>{{rollbackTarget.name}}</strong> from Active to Registrations? Event Day will become unavailable and registrations can be reviewed before reactivation.</p><p class="mt-2 text-sm text-amber-700">This is only allowed when no results have been entered. Existing event and round configuration is preserved.</p><div class="mt-5 flex justify-end gap-3"><button type="button" class="rounded-lg border border-[var(--border)] px-4 py-2" :disabled="rollbackBusy" @click="rollbackTarget=null">Cancel</button><button type="button" class="rounded-lg bg-amber-600 px-4 py-2 font-semibold text-white disabled:opacity-50" :disabled="rollbackBusy" @click="rollbackToRegistration">{{rollbackBusy?'Returning…':'Confirm return'}}</button></div></section></div>
+ <UiPageHeader :title="schoolName || 'Meets'" description="Meet management">
+  <template #actions><button v-if="canCreate" type="button" class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700" @click="reset"><LayoutNavIcon name="plus" /> Create meet</button> <div v-if="rollbackTarget" class="fixed inset-0 z-[70] grid place-items-center bg-black/70 p-4"><section role="alertdialog" aria-modal="true" aria-label="Return competition to Registrations" class="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 text-[var(--ink)] shadow-xl"><h2 class="text-xl font-bold">Return to Registrations?</h2><p class="mt-3 text-sm">Return <strong>{{rollbackTarget.name}}</strong> from Active to Registrations? Event Day will become unavailable and registrations can be reviewed before reactivation.</p><p class="mt-2 text-sm text-amber-700">This is only allowed when no results have been entered. Existing event and round configuration is preserved.</p><div class="mt-5 flex justify-end gap-3"><button type="button" class="rounded-lg border border-[var(--border)] px-4 py-2" :disabled="rollbackBusy" @click="rollbackTarget=null">Cancel</button><button type="button" class="rounded-lg bg-amber-600 px-4 py-2 font-semibold text-white disabled:opacity-50" :disabled="rollbackBusy" @click="rollbackToRegistration">{{rollbackBusy?'Returning…':'Confirm return'}}</button></div></section></div>
 </template>
  </UiPageHeader>
  <p v-if="error" role="alert" class="rounded-xl bg-red-50 p-4 text-red-700">{{error}}</p>
  <p v-if="notice" role="status" class="text-sm text-green-700">{{notice}}</p>
- <div class="grid gap-4 sm:grid-cols-3"><UiStatCard title="Competitions" :value="competitions.length"/><UiStatCard title="Active" :value="competitions.filter(c=>c.status==='active').length"/><UiStatCard title="Draft / Registration" :value="competitions.filter(c=>['draft','registration'].includes(c.status)).length"/></div>
  <UiPanel>
+  <div class="mb-5 flex gap-2" role="group" aria-label="Meet period">
+   <button v-for="period in (['upcoming','past'] as const)" :key="period" type="button" :aria-pressed="meetPeriod===period" :class="meetPeriod===period ? 'border-blue-600 bg-[var(--panel)] text-blue-600' : 'border-[var(--border)]'" class="rounded-lg border px-4 py-2 text-sm font-semibold hover:bg-[var(--panel)]" @click="changePeriod(period)">{{period==='upcoming'?'Upcoming meets':'Past meets'}}</button>
+  </div>
   <div class="mb-5 flex flex-wrap gap-3">
    <input v-model="search" aria-label="Search competitions" placeholder="Search competitions" type="search" class="min-w-48 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm"/>
    <select v-model="statusFilter" aria-label="Filter competition status" class="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm"><option value="all">All statuses</option><option v-for="s in statuses" :key="s" :value="s">{{s.replaceAll('_',' ')}}</option></select>
@@ -289,7 +310,7 @@ watch(schoolId,()=>{confirmSave.value=false;dialog.value=false;void load()},{imm
   <div v-else class="overflow-x-auto"><table class="w-full min-w-[650px] text-left text-sm">
    <thead><tr class="border-b border-[var(--border)] text-[var(--muted)]"><th class="py-3">Competition</th><th class="p-3">Sport</th><th class="p-3">School year</th><th class="p-3">Date</th><th class="p-3">Status</th><th class="p-3">Action</th></tr></thead>
    <tbody><tr v-for="c in visible" :key="c.id" class="border-b border-[var(--border)]"><td class="py-4 font-semibold">{{c.name}}</td><td class="p-3">{{sportName(c.sport_id)}}</td><td class="p-3">{{c.school_year}}</td><td class="p-3">{{c.starts_on||'Not scheduled'}}</td><td class="p-3 capitalize">{{c.status.replaceAll('_',' ')}}</td><td class="p-3"><div class="flex items-center gap-2"><button type="button" @click="registrationTarget=c" :aria-label="'Manage registrations for '+c.name" :title="'Manage registrations for '+c.name" class="rounded-lg border border-[var(--border)] p-2 text-blue-600"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></button><button :aria-label="'Manage events for '+c.name" :title="'Manage events for '+c.name" class="rounded-lg border border-[var(--border)] p-2 text-blue-600" @click="openEvents(c)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h1M3 12h1M3 18h1"/></svg></button><button :aria-label="'Scoring settings for '+c.name" :title="'Scoring settings for '+c.name" class="rounded-lg border border-[var(--border)] p-2 text-blue-600" @click="openScoring(c)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v6a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4v2a4 4 0 0 0 4 4M17 6h3v2a4 4 0 0 1-4 4"/></svg></button><button v-if="platformAdmin&&c.status==='active'" type="button" :aria-label="'Return '+c.name+' to Registrations'" title="Return to Registrations (Platform Admin)" class="rounded-lg border border-[var(--border)] p-2 text-amber-600" @click="rollbackTarget=c"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-2"/></svg></button><button v-if="canEdit(c)"  :aria-label="'Edit '+c.name" :title="'Edit '+c.name" class="rounded-lg border border-[var(--border)] p-2 text-blue-600" @click="edit(c)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg></button><span v-else class="text-xs text-[var(--muted)]">View only</span></div></td></tr></tbody>
-  </table><p v-if="!visible.length" class="py-8 text-center text-sm text-[var(--muted)]">No matching competitions.</p></div>
+  </table><p v-if="!visible.length" class="py-8 text-center text-sm text-[var(--muted)]">{{ search || statusFilter !== 'all' ? 'No matching meets.' : meetPeriod === 'upcoming' ? 'No upcoming meets.' : 'No past meets.' }}</p></div>
  </UiPanel>
  <div v-if="registrationTarget" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-3 sm:p-6" @click.self="registrationTarget=null">
   <section role="dialog" aria-modal="true" :aria-label="'Registrations for '+registrationTarget.name" class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl">

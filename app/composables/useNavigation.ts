@@ -1,24 +1,43 @@
 export function useNavigation() {
-  const {schoolId,platformAdmin,schoolRole}=useSchool()
-  const route=useRoute()
-  const administrationLevel=computed(()=>platformAdmin.value&&route.path.startsWith('/admin/'))
-  const organizationLevel=computed(()=>(platformAdmin.value||schoolRole.value==='school_admin')&&!administrationLevel.value&&!route.path.startsWith('/school/')&&!(route.path==='/dashboard'&&route.query.school))
-  const links=computed(()=>{
-    if(administrationLevel.value)return [{label:'Back to Organizations',to:'/dashboard'},{label:'Schools',to:'/admin/schools'},{label:'Platform Administrators',to:'/admin/platform-admins'},{label:'Issues & New Features',to:'/admin/issues'}]
-    if(organizationLevel.value)return [{label:'Organizations',to:'/dashboard'},{label:'Administrators',to:'/dashboard?view=administrators'},{label:'Account',to:'/dashboard?view=account'},{label:"What's New",to:'/dashboard?view=news'},{label:'Support',to:'/dashboard?view=support'},...(platformAdmin.value?[{label:'Administration',to:'/admin/schools'}]:[])]
-    const suffix=schoolId.value?'?school='+encodeURIComponent(schoolId.value):''
-    const school=schoolId.value?[
-      {label:'Houses',to:'/school/houses'+suffix},
-      {label:'Staff',to:'/school/staff'+suffix},
-      {label:'Students',to:'/school/students'+suffix},
-      {label:'Competitions',to:'/school/competitions'+suffix},
-      {label:'Registrations',to:'/school/entries'+suffix},
-      {label:'Event Day',to:'/school/race-day'+suffix},
-      {label:'Results',to:'/school/results'+suffix},
-      {label:'School Records',to:'/school/records'+suffix},
-      ...(platformAdmin.value||schoolRole.value==='school_admin'?[{label:'Year Rollover',to:'/school/rollover'+suffix},{label:'Access Scopes',to:'/school/access-scopes'+suffix}]:[])
-    ]:[]
-    return [...((platformAdmin.value||schoolRole.value==='school_admin')?[{label:'Back to Organizations',to:'/dashboard'}]:[]),{label:'Overview',to:'/dashboard'+suffix},...school]
+  const { schoolId, platformAdmin, schoolRole, organizationAdmin } = useSchool()
+  const route = useRoute()
+  const canManageSchool = computed(() => platformAdmin.value || schoolRole.value === 'school_admin')
+  const administrationLevel = computed(() => platformAdmin.value && route.path.startsWith('/admin/'))
+  const organizationLevel = computed(() => organizationAdmin.value && !administrationLevel.value
+    && route.path === '/dashboard' && !route.query.school)
+  const back = { label: 'Back to Organizations', to: '/dashboard', icon: 'back' }
+  const links = computed(() => {
+    if (administrationLevel.value) return [
+      { label: 'Schools', to: '/admin/schools', icon: 'school' },
+      { label: 'Platform Administrators', to: '/admin/platform-admins', icon: 'people' },
+      { label: 'Issues & New Features', to: '/admin/issues', icon: 'news' },
+      back
+    ]
+    if (organizationLevel.value) return [
+      { label: 'Organizations', to: '/dashboard', icon: 'school' },
+      { label: 'Administrators', to: '/dashboard?view=administrators', icon: 'people' },
+      { label: 'Account', to: '/dashboard?view=account', icon: 'account' },
+      { label: "What's New", to: '/dashboard?view=news', icon: 'news' },
+      { label: 'Support', to: '/dashboard?view=support', icon: 'help' },
+      ...(platformAdmin.value ? [{ label: 'Administration', to: '/admin/schools', icon: 'settings' }] : [])
+    ]
+
+    const suffix = schoolId.value ? '?school=' + encodeURIComponent(schoolId.value) : ''
+    const overview = { label: 'Overview', to: '/dashboard' + suffix, icon: 'school' }
+    if (!schoolId.value) return [overview]
+    return [
+      { label: 'Meets', to: '/school/competitions' + suffix, icon: 'calendar' },
+      { label: 'Registrations', to: '/school/registrations' + suffix, icon: 'news' },
+      { label: canManageSchool.value ? 'Administrators & Staff' : 'Staff', to: '/school/staff' + suffix, icon: 'people' },
+      { label: 'Students', to: '/school/students' + suffix, icon: 'account' },
+      { label: 'Teams & Houses', to: '/school/houses' + suffix, icon: 'people' },
+      { label: 'Event Day', to: '/school/race-day' + suffix, icon: 'calendar' },
+      { label: 'Results', to: '/school/results' + suffix, icon: 'results' },
+      { label: 'Records', to: '/school/records' + suffix, icon: 'award' },
+      ...(canManageSchool.value ? [{ label: 'Access Scopes', to: '/school/access-scopes' + suffix, icon: 'settings' }] : []),
+      overview,
+      ...(organizationAdmin.value ? [back] : [])
+    ]
   })
-  return {links,organizationLevel,administrationLevel}
+  return { links, organizationLevel, administrationLevel }
 }
