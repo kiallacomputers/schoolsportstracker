@@ -1,6 +1,6 @@
 <script setup lang="ts">
 definePageMeta({layout:'workspace'})
-type Competition={id:string;name:string;sport_id:string|null;competition_type:string;management_mode:string;heat_entry_mode:string;organiser_school_id:string|null;school_year:number;starts_on:string|null;status:string}
+type Competition={id:string;name:string;sport_id:string|null;competition_type:string;management_mode:string;heat_entry_mode:string;organiser_school_id:string|null;school_year:number;starts_on:string|null;status:string;default_race_lanes:number|null;default_event_capacity:number|null}
 type Sport={id:string;name:string}
 const db=useSupabaseClient()
 const {schoolId,platformAdmin,schoolOptions}=useSchool()
@@ -110,7 +110,7 @@ async function saveCutoff(){
 }
 const definitions=ref<EventDefinition[]>([]),events=ref<CompetitionEvent[]>([])
 const eventCompetition=ref<Competition|null>(null),eventDialog=ref(false),eventConfirm=ref(false),eventDelete=ref(false),eventSelected=ref<CompetitionEvent|null>(null),eventBusy=ref(false),eventLoading=ref(false)
-const eventForm=reactive({event_definition_id:'',age_group:'',division:'',is_team:false,min_age:'',max_age:'',max_participants:'',scheduled_on:'',starts_at:'',venue:'',schedule_order:'',duration_minutes:''})
+const eventForm=reactive({event_definition_id:'',age_group:'',division:'',is_team:false,min_age:'',max_age:'',max_participants:'',race_lanes:'',scheduled_on:'',starts_at:'',venue:'',schedule_order:'',duration_minutes:''})
 const availableDefinitions=computed(()=>definitions.value.filter(d=>d.sport_id===eventCompetition.value?.sport_id))
 function eventName(id:string){return definitions.value.find(d=>d.id===id)?.name||'Unknown event'}
 function eventMeasurement(id:string){return definitions.value.find(d=>d.id===id)?.measurement||''}
@@ -124,9 +124,9 @@ async function openEvents(c:Competition){
  finally{eventLoading.value=false}
 }
 function cDefaultDate(){return eventCompetition.value?.starts_on||''}
-function newEvent(){eventSelected.value=null;Object.assign(eventForm,{event_definition_id:availableDefinitions.value[0]?.id||'',age_group:'',division:'',is_team:false,min_age:'',max_age:'',max_participants:'',scheduled_on:cDefaultDate(),starts_at:'',venue:'',schedule_order:String(events.value.length+1),duration_minutes:''});eventConfirm.value=false;eventDialog.value=true}
+function newEvent(){eventSelected.value=null;Object.assign(eventForm,{event_definition_id:availableDefinitions.value[0]?.id||'',age_group:'',division:'',is_team:false,min_age:'',max_age:'',max_participants:eventCompetition.value?.default_event_capacity?.toString()||'',race_lanes:eventCompetition.value?.default_race_lanes?.toString()||'',scheduled_on:cDefaultDate(),starts_at:'',venue:'',schedule_order:String(events.value.length+1),duration_minutes:''});eventConfirm.value=false;eventDialog.value=true}
 function applyAgeGroup(){const g=ageGroups.value.find(g=>g.name===eventForm.age_group);if(g){eventForm.min_age=g.min_age===null?'':String(g.min_age);eventForm.max_age=g.max_age===null?'':String(g.max_age)}}
-function editEvent(e:CompetitionEvent){eventSelected.value=e;Object.assign(eventForm,{event_definition_id:e.event_definition_id,age_group:e.age_group||'',division:e.division||'',is_team:e.is_team,min_age:e.min_age?.toString()||'',max_age:e.max_age?.toString()||'',max_participants:e.max_participants?.toString()||'',scheduled_on:e.scheduled_on||'',starts_at:e.starts_at?.slice(0,5)||'',venue:e.venue||'',schedule_order:e.schedule_order?.toString()||'',duration_minutes:e.duration_minutes?.toString()||''});eventConfirm.value=false;eventDialog.value=true}
+function editEvent(e:CompetitionEvent){eventSelected.value=e;Object.assign(eventForm,{event_definition_id:e.event_definition_id,age_group:e.age_group||'',division:e.division||'',is_team:e.is_team,min_age:e.min_age?.toString()||'',max_age:e.max_age?.toString()||'',max_participants:e.max_participants?.toString()||'',race_lanes:'',scheduled_on:e.scheduled_on||'',starts_at:e.starts_at?.slice(0,5)||'',venue:e.venue||'',schedule_order:e.schedule_order?.toString()||'',duration_minutes:e.duration_minutes?.toString()||''});eventConfirm.value=false;eventDialog.value=true}
 function requestEventSave(){if(!eventBusy.value)eventConfirm.value=true}
 async function saveEvent(){
  if(eventBusy.value||!eventCompetition.value||!canEdit(eventCompetition.value))return
@@ -136,12 +136,15 @@ async function saveEvent(){
   const min=eventForm.min_age===''?null:Number(eventForm.min_age),max=eventForm.max_age===''?null:Number(eventForm.max_age),cap=eventForm.max_participants===''?null:Number(eventForm.max_participants)
   if([min,max].some(n=>n!==null&&(!Number.isInteger(n)||n<3||n>30))||(min!==null&&max!==null&&min>max))throw new Error('Age limits must be between 3 and 30, with minimum not exceeding maximum')
   if(cap!==null&&(!Number.isInteger(cap)||cap<1||cap>10000))throw new Error('Participant limit must be between 1 and 10000')
+  const showRaceLanes=!eventSelected.value&&eventMeasurement(eventForm.event_definition_id)==='time_ms'
+  const lanes=eventForm.race_lanes===''?null:Number(eventForm.race_lanes)
+  if(showRaceLanes&&lanes!==null&&(!Number.isInteger(lanes)||lanes<1||lanes>12))throw new Error('Race lanes must be between 1 and 12')
   const duration=eventForm.duration_minutes===''?null:Number(eventForm.duration_minutes),sequence=eventForm.schedule_order===''?null:Number(eventForm.schedule_order)
   if(duration!==null&&(!Number.isInteger(duration)||duration<1||duration>1440))throw new Error('Duration must be 1 to 1440 minutes')
   if(sequence!==null&&(!Number.isInteger(sequence)||sequence<1||sequence>10000))throw new Error('Order must be 1 to 10000')
   if(eventForm.starts_at&&!eventForm.scheduled_on)throw new Error('Choose an event date before setting a start time')
   if(eventForm.venue.trim().length>120)throw new Error('Venue must be 120 characters or fewer')
-  const payload={scheduled_on:eventForm.scheduled_on||null,starts_at:eventForm.starts_at||null,venue:eventForm.venue.trim()||null,schedule_order:sequence,duration_minutes:duration,event_definition_id:eventForm.event_definition_id,age_group:eventForm.age_group.trim()||null,division:eventForm.division.trim()||null,is_team:eventForm.is_team,min_age:min,max_age:max,max_participants:cap}
+  const payload={scheduled_on:eventForm.scheduled_on||null,starts_at:eventForm.starts_at||null,venue:eventForm.venue.trim()||null,schedule_order:sequence,duration_minutes:duration,event_definition_id:eventForm.event_definition_id,age_group:eventForm.age_group.trim()||null,division:eventForm.division.trim()||null,is_team:eventForm.is_team,min_age:min,max_age:max,max_participants:cap,...(showRaceLanes&&lanes!==null?{race_lanes:lanes}:{})}
   const result=eventSelected.value?await db.from('competition_events').update(payload).eq('id',eventSelected.value.id).eq('competition_id',eventCompetition.value.id):await db.from('competition_events').insert({...payload,competition_id:eventCompetition.value.id})
   if(result.error)throw result.error
   eventConfirm.value=false;eventDialog.value=false;notice.value=eventSelected.value?'Event updated successfully':'Event added successfully'
@@ -169,13 +172,6 @@ function readScoring(raw:any):ScoringScheme{
  return {placing_points:points,team_multiplier:typeof raw?.team_multiplier==='number'?raw.team_multiplier:1,allow_ties:raw?.allow_ties!==false}
 }
 function formatPoints(points:number[]){return points.join(', ')}
-function parsePoints(text:string){
- const parts=text.split(',').map(v=>v.trim())
- if(!parts.length||parts.length>30||parts.some(v=>v===''||!/^(?:\d+)(?:\.\d{1,2})?$/.test(v)))throw new Error('Enter 1 to 30 non-negative point values separated by commas (up to 2 decimals)')
- const values=parts.map(Number)
- if(values.some(v=>!Number.isFinite(v)||v>10000))throw new Error('Each placing must be between 0 and 10000 points')
- return values
-}
 async function openScoring(c:Competition){
  scoringCompetition.value=c;scoringDialog.value=true;scoringConfirm.value=false;scoringLoading.value=true;error.value=''
  try{
@@ -193,7 +189,7 @@ async function saveScoring(){
  if(!c||!canEdit(c)||scoringBusy.value)return
  scoringBusy.value=true;error.value=''
  try{
-  const points=parsePoints(scoringForm.points),multiplier=Number(scoringForm.team_multiplier)
+  const points=parseMeetPoints(scoringForm.points),multiplier=Number(scoringForm.team_multiplier)
   if(!Number.isFinite(multiplier)||multiplier<0||multiplier>20||Math.round(multiplier*100)!==multiplier*100)throw new Error('Team multiplier must be between 0 and 20 (up to 2 decimals)')
   const scheme:ScoringScheme={placing_points:points,team_multiplier:multiplier,allow_ties:scoringForm.allow_ties}
   const {data,error:e}=await db.from('competitions').update({scoring_scheme:scheme}).eq('id',c.id).select('id').single()
@@ -203,7 +199,7 @@ async function saveScoring(){
  }catch(e:any){error.value=e.message||'Unable to save scoring settings';scoringConfirm.value=false}
  finally{scoringBusy.value=false}
 }
-const pointsPreview=computed(()=>{try{return parsePoints(scoringForm.points)}catch{return []}})
+const pointsPreview=computed(()=>{try{return parseMeetPoints(scoringForm.points)}catch{return []}})
 const statuses=['draft','registration','active','completed','archived']
 const form=reactive({name:'',sport_id:'',school_year:new Date().getFullYear(),starts_on:'',status:'draft',heat_entry_mode:'sequential'})
 const meetPeriod=ref<'upcoming'|'past'>('upcoming')
@@ -236,7 +232,7 @@ async function load(){
  loading.value=true;error.value=''
  try{
   const [c,s]=await Promise.all([
-   db.from('competitions').select('id,name,sport_id,competition_type,management_mode,heat_entry_mode,organiser_school_id,school_year,starts_on,status').eq('organiser_school_id',schoolId.value).order('school_year',{ascending:false}).order('starts_on',{ascending:false}),
+   db.from('competitions').select('id,name,sport_id,competition_type,management_mode,heat_entry_mode,organiser_school_id,school_year,starts_on,status,default_race_lanes,default_event_capacity').eq('organiser_school_id',schoolId.value).order('school_year',{ascending:false}).order('starts_on',{ascending:false}),
    db.from('sports').select('id,name').order('name')
   ])
   if(c.error||s.error)throw c.error||s.error
@@ -377,6 +373,9 @@ watch(schoolId,()=>{confirmSave.value=false;dialog.value=false;void load()},{imm
     <div class="grid grid-cols-2 gap-3"><label class="block text-sm font-semibold">Age group<select v-model="eventForm.age_group" @change="applyAgeGroup" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option value="">All ages</option><option v-if="eventForm.age_group&&!ageGroups.some(g=>g.name===eventForm.age_group)" :value="eventForm.age_group">{{eventForm.age_group}} (legacy)</option><option v-for="g in ageGroups" :key="g.id" :value="g.name">{{g.name}}</option></select></label><label class="block text-sm font-semibold">Division<select v-model="eventForm.division" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><option value="">Open</option><option v-if="eventForm.division&&!divisions.some(d=>d.name===eventForm.division)" :value="eventForm.division">{{eventForm.division}} (legacy)</option><option v-for="d in divisions" :key="d.id" :value="d.name">{{d.name}}</option></select></label></div>
     <div class="grid grid-cols-2 gap-3"><label class="block text-sm font-semibold">Minimum age<input v-model="eventForm.min_age" type="number" min="3" max="30" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label><label class="block text-sm font-semibold">Maximum age<input v-model="eventForm.max_age" type="number" min="3" max="30" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label></div>
     <fieldset class="rounded-xl border border-[var(--border)] p-3"><legend class="px-2 text-sm font-semibold">Event scheduling</legend><div class="grid grid-cols-2 gap-3"><label class="block text-sm font-semibold">Date<input v-model="eventForm.scheduled_on" type="date" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label><label class="block text-sm font-semibold">Start time<input v-model="eventForm.starts_at" type="time" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label><label class="block text-sm font-semibold">Running order<input v-model="eventForm.schedule_order" type="number" min="1" max="10000" placeholder="Optional" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label><label class="block text-sm font-semibold">Duration (minutes)<input v-model="eventForm.duration_minutes" type="number" min="1" max="1440" placeholder="Optional" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label></div><label class="mt-3 block text-sm font-semibold">Venue / location<input v-model="eventForm.venue" maxlength="120" placeholder="e.g. Main oval, Track 1" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label></fieldset>
+    <label v-if="!eventSelected && eventMeasurement(eventForm.event_definition_id)==='time_ms'" class="block text-sm font-semibold">Race lanes
+     <input v-model="eventForm.race_lanes" type="number" min="1" max="12" placeholder="Use current default" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/>
+    </label>
     <label class="block text-sm font-semibold">Maximum participants<input v-model="eventForm.max_participants" type="number" min="1" max="10000" placeholder="Optional" class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"/></label>
     <label class="flex items-center gap-3 text-sm font-semibold"><input v-model="eventForm.is_team" type="checkbox" class="h-4 w-4"/>Team event</label>
     <div class="flex justify-end gap-3"><button type="button" aria-label="Cancel" title="Cancel" class="rounded-xl border border-[var(--border)] p-3 text-red-700" @click="eventDialog=false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button><button type="submit" :disabled="eventBusy||!availableDefinitions.length" aria-label="Save event" title="Save event" class="rounded-xl bg-blue-600 p-3 text-white disabled:opacity-50"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5V3h11l5 5v13ZM7 21v-8h10v8M7 3v5h8"/></svg></button></div>

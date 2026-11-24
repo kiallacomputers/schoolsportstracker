@@ -28,6 +28,7 @@ export function useNavigation() {
     return [
       { label: 'Meets', to: '/school/competitions' + suffix, icon: 'calendar' },
       { label: 'Registrations', to: '/school/registrations' + suffix, icon: 'news' },
+      ...(canManageSchool.value ? [{ label: 'Settings', to: '/school/settings' + suffix, icon: 'settings' }] : []),
       { label: canManageSchool.value ? 'Administrators & Staff' : 'Staff', to: '/school/staff' + suffix, icon: 'people' },
       { label: 'Students', to: '/school/students' + suffix, icon: 'account' },
       { label: 'Teams & Houses', to: '/school/houses' + suffix, icon: 'people' },
