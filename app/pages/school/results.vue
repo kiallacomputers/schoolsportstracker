@@ -6,6 +6,19 @@ const competitions=ref<any[]>([]),events=ref<any[]>([]),rounds=ref<any[]>([]),re
 const competitionId=ref(''),eventId=ref(''),roundId=ref('')
 const busy=ref(false),error=ref('')
 const selectedCompetition=computed(()=>competitions.value.find(c=>c.id===competitionId.value))
+const showHouse=computed(()=>selectedCompetition.value?.scoring_format!=='individual')
+const showIndividual=computed(()=>['individual','both'].includes(selectedCompetition.value?.scoring_format))
+const individualTotals=ref<any[]>([]),individualError=ref('')
+async function loadIndividual(){
+ individualTotals.value=[];individualError.value=''
+ if(!showIndividual.value)return
+ const cid=competitionId.value
+ try{
+  const {data,error:e}=await db.rpc('competition_individual_standings',{p_competition_id:cid,p_school_id:schoolId.value})
+  if(e)throw e
+  if(cid===competitionId.value)individualTotals.value=data||[]
+ }catch(e:any){if(cid===competitionId.value)individualError.value=e.message||'Unable to load individual standings'}
+}
 const selectedEvent=computed(()=>events.value.find(e=>e.id===eventId.value))
 const selectedRound=computed(()=>rounds.value.find(r=>r.id===roundId.value))
 const eventName=(e:any)=>[e.event_definitions?.name,e.age_group,e.division].filter(Boolean).join(' · ')
@@ -42,7 +55,7 @@ async function loadCompetitions(){
  if(!schoolId.value)return
  busy.value=true
  try{
-  const [c,h]=await Promise.all([get('competitions','id,name,status,organiser_school_id,school_year','organiser_school_id',schoolId.value),get('school_houses','id,name,colour','school_id',schoolId.value)])
+  const [c,h]=await Promise.all([get('competitions','id,name,status,organiser_school_id,school_year,scoring_format','organiser_school_id',schoolId.value),get('school_houses','id,name,colour','school_id',schoolId.value)])
   competitions.value=c.sort((a,b)=>a.name.localeCompare(b.name));houses.value=h
   competitionId.value=c.find(x=>x.status==='active')?.id||c[0]?.id||''
   if(competitionId.value)await loadEvents()
@@ -56,7 +69,7 @@ async function loadEvents(){
   const [ev,t]=await Promise.all([get('competition_events','id,competition_id,event_definition_id,age_group,division,event_definitions(name,measurement)','competition_id',competitionId.value),get('competition_house_totals','competition_id,school_id,house_id,total_points,scored_results','competition_id',competitionId.value)])
   events.value=ev.sort((a,b)=>eventName(a).localeCompare(eventName(b)));totals.value=t.filter(x=>x.school_id===schoolId.value)
   eventId.value=events.value[0]?.id||''
-  if(eventId.value)await loadRounds()
+  await loadIndividual();if(eventId.value)await loadRounds()
  }catch(e:any){error.value=e.message||'Unable to load event results'}finally{busy.value=false}
 }
 async function loadRounds(){
@@ -89,7 +102,7 @@ watch(schoolId,loadCompetitions,{immediate:true})
 </script>
 <template>
 <div class="space-y-6">
- <UiPageHeader title="Results & Leaderboards" description="Published competition results and house championship standings."/>
+ <UiPageHeader title="Results & Leaderboards" description="Published competition results and championship standings."/>
  <p v-if="error" role="alert" class="rounded-xl border border-red-300 bg-red-50 p-4 text-red-700">{{error}}</p>
  <UiPanel>
   <div class="grid gap-4 md:grid-cols-3">
@@ -109,7 +122,7 @@ watch(schoolId,loadCompetitions,{immediate:true})
     <strong class="whitespace-nowrap">{{Number(r.points||0)}} pts</strong>
    </div>
   </UiPanel>
-  <UiPanel>
+  <UiPanel v-if="showHouse">
    <h2 class="mb-3 text-xl font-bold">House leaderboard</h2>
    <p class="mb-3 text-sm text-[var(--muted)]">{{selectedCompetition?.name}} · Published points only</p>
    <p v-if="!orderedTotals.length" class="text-sm text-[var(--muted)]">No house points have been published yet.</p>
@@ -118,6 +131,7 @@ watch(schoolId,loadCompetitions,{immediate:true})
     <strong>{{Number(t.total_points)}} pts</strong>
    </div>
   </UiPanel>
+ <UiPanel v-if="showIndividual"><h2 class="mb-3 text-xl font-bold">Individual championships</h2><p class="mb-3 text-sm text-[var(--muted)]">Published individual final results only. Relay points excluded.</p><p v-if="individualError" class="text-red-600">{{individualError}}</p><p v-else-if="!individualTotals.length">No individual championship points published yet.</p><div v-for="t in individualTotals" :key="t.student_id+'|'+t.age_group+'|'+t.division" class="flex justify-between gap-3 border-b border-[var(--border)] py-3"><div><strong>{{t.rank}} · {{t.student_name}}</strong><p class="text-xs text-[var(--muted)]">{{t.age_group}} · {{t.division}}</p></div><strong>{{t.total_points}} pts</strong></div></UiPanel>
  </div>
  <p v-else-if="!busy" class="text-sm text-[var(--muted)]">No competitions found for this school.</p>
 </div>
