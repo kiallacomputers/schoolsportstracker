@@ -1,5 +1,6 @@
 <script setup lang="ts">
 definePageMeta({layout:'workspace'})
+const route=useRoute()
 const db=useSupabaseClient()
 const {schoolId}=useSchool()
 const competitions=ref<any[]>([]),events=ref<any[]>([]),rounds=ref<any[]>([]),entries=ref<any[]>([]),results=ref<any[]>([]),houses=ref<any[]>([]),totals=ref<any[]>([])
@@ -507,7 +508,9 @@ async function loadCompetitions(){
   ])
   competitions.value=c;houses.value=h
   const active=c.filter((competition:any)=>competition.status==='active')
-  if(active.length===1){competitionId.value=active[0].id;await loadEvents()}
+  const requested=typeof route.query.competition==='string'?route.query.competition:''
+  if(requested){const match=active.find(x=>x.id===requested);if(match){competitionId.value=match.id;await loadEvents()}else error.value='The selected competition is not active or is unavailable for this school.'}
+  else if(active.length===1){competitionId.value=active[0].id;await loadEvents()}
   else if(active.length>1)error.value='More than one active competition was found for this school. Resolve this in Competitions before using Race Day.'
  }catch(e:any){error.value=e.message||'Unable to load competitions'}finally{loading.value=false}
 }
@@ -806,7 +809,7 @@ async function publishRound(){
  }catch(e:any){error.value=e.message||'Unable to publish round results. Refresh to check progress before retrying.'}
  finally{publishing.value=false}
 }
-watch(schoolId,loadCompetitions,{immediate:true})
+watch([schoolId,()=>route.query.competition],loadCompetitions,{immediate:true})
 </script>
 <template>
 <div class="space-y-6">
