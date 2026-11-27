@@ -1,5 +1,6 @@
 <script setup lang="ts">
 definePageMeta({layout:'workspace'})
+const route=useRoute()
 const db=useSupabaseClient()
 const {schoolId}=useSchool()
 const competitions=ref<any[]>([]),events=ref<any[]>([]),rounds=ref<any[]>([]),results=ref<any[]>([]),entries=ref<any[]>([]),participants=ref<any[]>([]),students=ref<any[]>([]),houses=ref<any[]>([]),totals=ref<any[]>([])
@@ -57,7 +58,9 @@ async function loadCompetitions(){
  try{
   const [c,h]=await Promise.all([get('competitions','id,name,status,organiser_school_id,school_year,scoring_format','organiser_school_id',schoolId.value),get('school_houses','id,name,colour','school_id',schoolId.value)])
   competitions.value=c.sort((a,b)=>a.name.localeCompare(b.name));houses.value=h
-  competitionId.value=c.find(x=>x.status==='active')?.id||c[0]?.id||''
+  const requested=typeof route.query.competition==='string'?route.query.competition:''
+  competitionId.value=requested?(c.find(x=>x.id===requested)?.id||''):(c.find(x=>x.status==='active')?.id||c[0]?.id||'')
+  if(requested&&!competitionId.value)error.value='The selected competition is unavailable for this school.'
   if(competitionId.value)await loadEvents()
  }catch(e:any){error.value=e.message||'Unable to load competitions'}finally{busy.value=false}
 }
@@ -98,7 +101,7 @@ async function loadResults(){
  try{results.value=await get('event_results','id,round_id,entry_id,status,performance_value,placing_position,points,published_at,record_badge','round_id',roundId.value)}
  catch(e:any){error.value=e.message||'Unable to load results'}finally{busy.value=false}
 }
-watch(schoolId,loadCompetitions,{immediate:true})
+watch([schoolId,()=>route.query.competition],loadCompetitions,{immediate:true})
 </script>
 <template>
 <div class="space-y-6">
